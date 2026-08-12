@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>pdf-drm admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f7f7f8; --panel: #ffffff; --text: #1a1a1a; --muted: #6b7280;
+    --border: #e5e7eb; --accent: #b91c1c; --accent-bg: #fee2e2;
+    --ok: #15803d; --ok-bg: #dcfce7; --warn-bg: #fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a; --panel: #1f2023; --text: #e8e8ea; --muted: #9aa0a6;
+      --border: #33353a; --accent: #f87171; --accent-bg: #3a1c1c;
+      --ok: #4ade80; --ok-bg: #123a20; --warn-bg: #3a2f0c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  nav.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  nav.tabs button {
+    background: none; border: none; padding: 10px 16px; cursor: pointer;
+    color: var(--muted); font-size: 14px; border-bottom: 2px solid transparent;
+  }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { margin: 0 0 12px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 500; }
+  tr:hover td { background: rgba(127,127,127,0.06); }
+  code { font-size: 12px; background: rgba(127,127,127,0.12); padding: 2px 5px; border-radius: 4px; }
+  button {
+    cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.danger { color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  input, select {
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    padding: 6px 8px; border-radius: 6px; font-size: 13px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .row label { color: var(--muted); font-size: 12px; margin-right: -4px; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.bad { background: var(--accent-bg); color: var(--accent); }
+  .badge.warn { background: var(--warn-bg); }
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); padding: 20px; text-align: center; }
+  #login { max-width: 380px; margin: 15vh auto; }
+  #login .panel { text-align: center; }
+  #login input { width: 100%; margin: 10px 0; }
+  #login button { width: 100%; }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--border);
+    padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); font-size: 13px;
+    max-width: 320px;
+  }
+  .toast.error { border-color: var(--accent); color: var(--accent); }
+  .checkbox-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+  .checkbox-list label { display: block; padding: 3px 0; font-size: 13px; cursor: pointer; }
+  .fp { font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="panel">
+    <h2>pdf-drm admin</h2>
+    <input id="serverInput" type="text" placeholder="Server URL (mặc định: trang này)" autocomplete="off">
+
+    <p class="muted" style="margin-top:16px">Đăng nhập bằng tài khoản</p>
+    <input id="usernameInput" type="text" placeholder="Username" autocomplete="off">
+    <input id="passwordInput" type="password" placeholder="Password" autocomplete="off">
+    <button class="primary" onclick="loginWithPassword()">Đăng nhập</button>
+
+    <p class="muted" style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px">
+      Chưa có tài khoản? Đăng nhập bằng admin token (biến môi trường
+      <code>PDF_DRM_ADMIN_TOKEN</code> khi chạy server) để tạo tài khoản đầu
+      tiên ở tab "Quản trị viên".
+    </p>
+    <input id="tokenInput" type="password" placeholder="Admin token" autocomplete="off">
+    <button onclick="loginWithToken()">Đăng nhập bằng token</button>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>pdf<span>-</span>drm <span class="muted" style="font-weight:400">admin</span></h1>
+    <div style="display:flex; align-items:center; gap:12px">
+      <span class="muted" id="currentUserLabel"></span>
+      <button onclick="logout()">Đăng xuất</button>
+    </div>
+  </header>
+  <main>
+    <nav class="tabs">
+      <button data-tab="documents" class="active">Tài liệu</button>
+      <button data-tab="groups">Nhóm tài liệu</button>
+      <button data-tab="pending">Yêu cầu chờ duyệt</button>
+      <button data-tab="licenses">License</button>
+      <button data-tab="log">Access log</button>
+      <button data-tab="users">Quản trị viên</button>
+    </nav>
+
+    <section id="tab-documents">
+      <div class="panel">
+        <h2>Mã hóa &amp; tải lên tài liệu mới</h2>
+        <div class="row">
+          <input id="uploadTitle" type="text" placeholder="Tên tài liệu" style="width:220px">
+          <input id="uploadFile" type="file" accept="application/pdf">
+          <button class="primary" onclick="uploadDocument()">Mã hóa &amp; tải lên</button>
+        </div>
+        <p class="muted">File PDF được mã hóa ngay trên server (AES-256-GCM) và lưu lại để tải về
+          bất cứ lúc nào — không cần dùng CLI. Tối đa 300MB/file.</p>
+      </div>
+      <div class="panel">
+        <h2>Tài liệu đã mã hóa</h2>
+        <table>
+          <thead><tr><th>Title</th><th>doc_id</th><th>Kích thước</th><th>Nhóm</th><th># license</th><th>Tạo lúc</th><th></th></tr></thead>
+          <tbody id="documentsBody"></tbody>
+        </table>
+        <div id="documentsEmpty" class="empty" style="display:none">Chưa có tài liệu nào. Tải lên ở trên, hoặc dùng <code>cli.encrypt</code> / <code>cli.batch_encrypt</code>.</div>
+      </div>
+    </section>
+
+    <section id="tab-groups" style="display:none">
+      <div class="panel">
+        <h2>Tạo nhóm mới</h2>
+        <div class="row">
+          <input id="newGroupName" type="text" placeholder="Tên nhóm (vd. Báo cáo Q3)" style="width:280px">
+        </div>
+        <div class="row"><label>Chọn tài liệu đưa vào nhóm:</label></div>
+        <div class="checkbox-list" id="newGroupDocList"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" onclick="createGroup()">Tạo nhóm</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Danh sách nhóm</h2>
+        <table>
+          <thead><tr><th>Tên nhóm</th><th># tài liệu</th><th>Tạo lúc</th><th></th></tr></thead>
+          <tbody id="groupsBody"></tbody>
+        </table>
+        <div id="groupsEmpty" class="empty" style="display:none">Chưa có nhóm nào.</div>
+      </div>
+      <div class="panel" id="groupDetailPanel" style="display:none">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">Chi tiết nhóm: <span id="groupDetailName"></span></h2>
+          <button onclick="hideGroupDetail()">Ẩn</button>
+        </div>
+        <table>
+          <thead><tr><th>Title</th><th></th></tr></thead>
+          <tbody id="groupDetailBody"></tbody>
+        </table>
+        <div class="row" style="margin-top:10px">
+          <select id="groupAddDocSelect"></select>
+          <button onclick="addDocToGroup()">Thêm vào nhóm</button>
+          <button class="danger" onclick="deleteGroup()" style="margin-left:auto">Xóa nhóm này</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Cấp license theo nhóm</h2>
+        <p class="muted">Cấp toàn bộ tài liệu trong 1 nhóm cho 1 máy trong một lần bấm, thay vì chọn từng tài liệu.</p>
+        <div class="row">
+          <select id="groupGrantSelect"></select>
+          <input id="groupGrantFingerprint" type="text" placeholder="machine_fingerprint (64 hex)" style="width:280px" class="fp">
+          <input id="groupGrantLabel" type="text" placeholder="Tên hiển thị / email (watermark)">
+          <input id="groupGrantExpiry" type="datetime-local">
+          <button class="primary" onclick="grantByGroup()">Cấp cho cả nhóm</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-pending" style="display:none">
+      <div class="panel">
+        <h2>Yêu cầu truy cập đang chờ</h2>
+        <table>
+          <thead><tr><th><input type="checkbox" id="pendingSelectAll" onclick="toggleSelectAllPending(this)"></th><th>Username</th><th>Email</th><th>Fingerprint</th><th>Ghi chú</th><th>Lúc</th></tr></thead>
+          <tbody id="pendingBody"></tbody>
+        </table>
+        <div id="pendingEmpty" class="empty" style="display:none">Không có yêu cầu nào đang chờ.</div>
+      </div>
+      <div class="panel">
+        <h2>Duyệt các yêu cầu đã chọn</h2>
+        <div class="row">
+          <label>Áp dụng nhóm:</label>
+          <select id="pendingGroupSelect"><option value="">-- chọn nhóm để tự tick tài liệu --</option></select>
+          <button onclick="applyGroupToPending()">Áp dụng</button>
+        </div>
+        <div class="row"><label>Cấp quyền cho tài liệu:</label></div>
+        <div class="checkbox-list" id="pendingDocList"></div>
+        <div class="row" style="margin-top:10px">
+          <label>Số ngày hết hạn</label>
+          <input id="pendingExpiryDays" type="number" min="1" placeholder="vd. 30" style="width:80px" oninput="applyExpiryDays()">
+          <label class="muted">hoặc chọn ngày cụ thể</label>
+          <input id="pendingExpiry" type="datetime-local">
+          <button class="primary" onclick="approveSelectedPending()">Duyệt đã chọn</button>
+          <button class="danger" onclick="rejectSelectedPending()">Từ chối đã chọn</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-licenses" style="display:none">
+      <div class="panel">
+        <h2>Cấp license trực tiếp</h2>
+        <div class="row">
+          <select id="grantDocSelect"></select>
+          <input id="grantFingerprint" type="text" placeholder="machine_fingerprint (64 hex)" style="width:280px" class="fp">
+          <input id="grantLabel" type="text" placeholder="Tên hiển thị / email (watermark)">
+          <input id="grantExpiry" type="datetime-local">
+          <button class="primary" onclick="grantLicense()">Cấp</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Danh sách license</h2>
+        <div class="row">
+          <label>Lọc theo tài liệu</label>
+          <select id="licenseFilterDoc" onchange="loadLicenses()"><option value="">Tất cả</option></select>
+        </div>
+        <table>
+          <thead><tr><th>Label</th><th>Fingerprint</th><th id="licenseCol3">Hết hạn</th><th id="licenseCol4">Trạng thái</th><th></th></tr></thead>
+          <tbody id="licensesBody"></tbody>
+        </table>
+        <div id="licensesEmpty" class="empty" style="display:none">Chưa có license nào.</div>
+      </div>
+      <div class="panel" id="licenseDetailPanel" style="display:none">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">Chi tiết truy cập: <span id="licenseDetailLabel"></span></h2>
+          <button onclick="hideLicenseDetail()">Ẩn</button>
+        </div>
+        <table>
+          <thead><tr><th>Tài liệu</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
+          <tbody id="licenseDetailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-log" style="display:none">
+      <div class="panel">
+        <h2>Access log</h2>
+        <div class="row">
+          <label>Lọc theo tài liệu</label>
+          <select id="logFilterDoc" onchange="loadLog()"><option value="">Tất cả</option></select>
+        </div>
+        <table>
+          <thead><tr><th>Lúc</th><th>Tài liệu</th><th>Fingerprint</th><th>Kết quả</th></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+        <div id="logEmpty" class="empty" style="display:none">Chưa có log nào.</div>
+      </div>
+    </section>
+
+    <section id="tab-users" style="display:none">
+      <div class="panel">
+        <h2>Tạo tài khoản quản trị</h2>
+        <div class="row">
+          <input id="newUserName" type="text" placeholder="Username" style="width:160px">
+          <input id="newUserPassword" type="password" placeholder="Password (tối thiểu 8 ký tự)" style="width:220px">
+          <button class="primary" onclick="createAdminUser()">Tạo tài khoản</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Danh sách tài khoản</h2>
+        <table>
+          <thead><tr><th>Username</th><th>Tạo lúc</th><th></th></tr></thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+        <div id="usersEmpty" class="empty" style="display:none">Chưa có tài khoản nào.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+let SERVER = '';
+let TOKEN = '';
+let documents = [];
+
+function toast(msg, isError) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({'X-Admin-Token': TOKEN, 'Content-Type': 'application/json'}, opts.headers || {});
+  const resp = await fetch(SERVER + path, opts);
+  if (resp.status === 403) {
+    toast('Token không đúng, vui lòng đăng nhập lại', true);
+    logout();
+    throw new Error('403');
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.detail || resp.statusText);
+  }
+  return resp.status === 204 ? null : resp.json();
+}
+
+function validServer(server) {
+  // Empty is fine (means "this page's own origin"). If non-empty, it must
+  // be a real http(s) URL -- otherwise fetch() silently treats it as a
+  // relative path and every API call 404s/405s with no clear reason why
+  // (this is exactly what happens if the admin token gets typed into this
+  // field by mistake).
+  return !server || /^https?:\/\//i.test(server);
+}
+
+function loginWithToken() {
+  const token = document.getElementById('tokenInput').value.trim();
+  const server = document.getElementById('serverInput').value.trim();
+  if (!token) { toast('Nhập token trước đã', true); return; }
+  if (!validServer(server)) {
+    toast('Server URL không hợp lệ -- để trống nếu dùng chung trang này, hoặc nhập dạng http://... Bạn có gõ nhầm token vào ô này không?', true);
+    return;
+  }
+  TOKEN = token;
+  SERVER = server || '';
+  sessionStorage.setItem('pdfdrm_token', TOKEN);
+  sessionStorage.setItem('pdfdrm_server', SERVER);
+  sessionStorage.removeItem('pdfdrm_username');
+  showApp();
+}
+
+async function loginWithPassword() {
+  const username = document.getElementById('usernameInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+  const server = document.getElementById('serverInput').value.trim();
+  if (!username || !password) { toast('Nhập username và password', true); return; }
+  if (!validServer(server)) {
+    toast('Server URL không hợp lệ -- để trống nếu dùng chung trang này, hoặc nhập dạng http://...', true);
+    return;
+  }
+  SERVER = server || '';
+  let data;
+  try {
+    const resp = await fetch(SERVER + '/admin/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password}),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || resp.statusText);
+    }
+    data = await resp.json();
+  } catch (e) {
+    toast('Đăng nhập thất bại: ' + e.message, true);
+    return;
+  }
+  TOKEN = data.session_token;
+  sessionStorage.setItem('pdfdrm_token', TOKEN);
+  sessionStorage.setItem('pdfdrm_server', SERVER);
+  sessionStorage.setItem('pdfdrm_username', data.username);
+  showApp();
+}
+
+function logout() {
+  if (TOKEN) {
+    fetch(SERVER + '/admin/auth/logout', {method: 'POST', headers: {'X-Admin-Token': TOKEN}}).catch(() => {});
+  }
+  sessionStorage.removeItem('pdfdrm_token');
+  sessionStorage.removeItem('pdfdrm_server');
+  sessionStorage.removeItem('pdfdrm_username');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login').style.display = 'block';
+}
+
+async function showApp() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const username = sessionStorage.getItem('pdfdrm_username');
+  document.getElementById('currentUserLabel').textContent = username ? `Xin chào, ${username}` : '';
+  try {
+    await refreshAll();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('main section').forEach(s => s.style.display = 'none');
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
+  });
+});
+
+function fmtDate(s) {
+  if (!s) return '';
+  return s.replace('T', ' ').replace(/\+.*$/, '').slice(0, 19);
+}
+
+function shortFp(fp) {
+  return fp ? fp.slice(0, 10) + '…' : '';
+}
+
+async function refreshAll() {
+  await loadDocuments();
+  await loadGroups();
+  await loadPending();
+  populateDocSelects();
+  await loadLicenses();
+  await loadLog();
+  await loadAdminUsers();
+}
+
+function formatBytes(n) {
+  if (n == null) return '—';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+async function loadDocuments() {
+  documents = await api('/admin/documents');
+  const body = document.getElementById('documentsBody');
+  body.innerHTML = '';
+  document.getElementById('documentsEmpty').style.display = documents.length ? 'none' : 'block';
+  for (const d of documents) {
+    const tr = document.createElement('tr');
+    const downloadBtn = d.file_size != null
+      ? `<button onclick="downloadDocument('${d.doc_id}')">Tải file</button>`
+      : `<button disabled title="Tài liệu này được tạo qua CLI, server không giữ file gốc">Tải file</button>`;
+    const groupBadges = d.groups.length
+      ? d.groups.map(g => `<span class="badge warn" style="cursor:pointer" onclick="viewGroupFromDocuments('${g.group_id}')" title="Xem nhóm">${escapeHtml(g.name)}</span>`).join(' ')
+      : '<span class="muted">—</span>';
+    tr.innerHTML = `<td>${escapeHtml(d.title)}</td><td><code>${d.doc_id}</code></td>
+      <td class="muted">${formatBytes(d.file_size)}</td>
+      <td>${groupBadges}</td>
+      <td>${d.license_count}</td><td class="muted">${fmtDate(d.created_at)}</td>
+      <td>
+        <button onclick="filterLicensesFor('${d.doc_id}')">Xem license</button>
+        ${downloadBtn}
+        <button class="danger" data-role="delete-doc">Xóa</button>
+      </td>`;
+    // d.title is free text (upload form / CLI --title) and may contain a
+    // quote -- bind via closure instead of interpolating it into an
+    // onclick="..." string, where a title like `x'); evil() //` would break
+    // out of the JS string literal and run arbitrary JS with this admin
+    // session's token in scope.
+    tr.querySelector('[data-role="delete-doc"]').addEventListener('click', () => deleteDocument(d.doc_id, d.title));
+    body.appendChild(tr);
+  }
+}
+
+async function uploadDocument() {
+  const title = document.getElementById('uploadTitle').value.trim();
+  const fileInput = document.getElementById('uploadFile');
+  const file = fileInput.files[0];
+  if (!title) { toast('Nhập tên tài liệu', true); return; }
+  if (!file) { toast('Chọn 1 file PDF', true); return; }
+
+  const formData = new FormData();
+  formData.append('title', title);
+  formData.append('file', file);
+
+  let resp;
+  try {
+    resp = await fetch(SERVER + '/admin/documents/upload', {
+      method: 'POST',
+      headers: {'X-Admin-Token': TOKEN},
+      body: formData,
+    });
+  } catch (e) {
+    toast('Tải lên thất bại: ' + e.message, true);
+    return;
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    toast('Tải lên thất bại: ' + (body.detail || resp.statusText), true);
+    return;
+  }
+  toast('Đã mã hóa và lưu tài liệu');
+  document.getElementById('uploadTitle').value = '';
+  fileInput.value = '';
+  await loadDocuments();
+  populateDocSelects();
+}
+
+function downloadDocument(docId) {
+  fetch(SERVER + `/admin/documents/${encodeURIComponent(docId)}/download`, {
+    headers: {'X-Admin-Token': TOKEN},
+  }).then(async resp => {
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      toast('Không tải được: ' + (body.detail || resp.statusText), true);
+      return;
+    }
+    const blob = await resp.blob();
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    // Server sends RFC 5987 encoding (filename*=utf-8''...) whenever the
+    // title has spaces/non-ASCII chars, which is almost always -- fall back
+    // to the plain filename="..." form, then to doc_id only if neither parses.
+    let filename = docId + '.cpdf';
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
+    if (utf8Match) {
+      filename = decodeURIComponent(utf8Match[1]);
+    } else if (plainMatch) {
+      filename = plainMatch[1];
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+async function deleteDocument(docId, title) {
+  if (!confirm(`Xóa tài liệu "${title}"? Toàn bộ license đã cấp cho tài liệu này cũng sẽ bị xóa. Không thể hoàn tác.`)) return;
+  await api('/admin/documents/' + encodeURIComponent(docId), {method: 'DELETE'});
+  toast('Đã xóa tài liệu');
+  await loadDocuments();
+  await loadGroups();
+  populateDocSelects();
+}
+
+function populateDocSelects() {
+  const opts = documents.map(d => `<option value="${d.doc_id}">${escapeHtml(d.title)}</option>`).join('');
+  document.getElementById('grantDocSelect').innerHTML = opts;
+
+  const filterOpts = '<option value="">Tất cả</option>' + opts;
+  document.getElementById('licenseFilterDoc').innerHTML = filterOpts;
+  document.getElementById('logFilterDoc').innerHTML = filterOpts;
+
+  document.getElementById('pendingDocList').innerHTML = documents.map(d =>
+    `<label><input type="checkbox" value="${d.doc_id}" class="pendingDocCheck"> ${escapeHtml(d.title)}</label>`
+  ).join('') || '<span class="muted">Chưa có tài liệu nào</span>';
+
+  document.getElementById('newGroupDocList').innerHTML = documents.map(d =>
+    `<label><input type="checkbox" value="${d.doc_id}" class="newGroupDocCheck"> ${escapeHtml(d.title)}</label>`
+  ).join('') || '<span class="muted">Chưa có tài liệu nào</span>';
+
+  document.getElementById('groupAddDocSelect').innerHTML = opts;
+}
+
+function filterLicensesFor(docId) {
+  document.querySelector('[data-tab="licenses"]').click();
+  document.getElementById('licenseFilterDoc').value = docId;
+  loadLicenses();
+}
+
+function viewGroupFromDocuments(groupId) {
+  document.querySelector('[data-tab="groups"]').click();
+  showGroupDetail(groupId);
+}
+
+let groups = [];
+let currentGroupId = null;
+
+async function loadGroups() {
+  groups = await api('/admin/groups');
+  const body = document.getElementById('groupsBody');
+  body.innerHTML = '';
+  document.getElementById('groupsEmpty').style.display = groups.length ? 'none' : 'block';
+  for (const g of groups) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(g.name)}</td>
+      <td>${g.doc_count}</td><td class="muted">${fmtDate(g.created_at)}</td>
+      <td><button onclick="showGroupDetail('${g.group_id}')">Xem</button></td>`;
+    body.appendChild(tr);
+  }
+
+  const opts = groups.map(g => `<option value="${g.group_id}">${escapeHtml(g.name)} (${g.doc_count})</option>`).join('');
+  document.getElementById('pendingGroupSelect').innerHTML =
+    '<option value="">-- chọn nhóm để tự tick tài liệu --</option>' + opts;
+  document.getElementById('groupGrantSelect').innerHTML = opts;
+}
+
+async function createGroup() {
+  const name = document.getElementById('newGroupName').value.trim();
+  const docIds = [...document.querySelectorAll('.newGroupDocCheck:checked')].map(c => c.value);
+  if (!name) { toast('Nhập tên nhóm', true); return; }
+  if (!docIds.length) { toast('Chọn ít nhất 1 tài liệu', true); return; }
+  await api('/admin/groups', {method: 'POST', body: JSON.stringify({name, doc_ids: docIds})});
+  toast('Đã tạo nhóm');
+  document.getElementById('newGroupName').value = '';
+  document.querySelectorAll('.newGroupDocCheck').forEach(c => c.checked = false);
+  await loadGroups();
+}
+
+async function showGroupDetail(groupId) {
+  const detail = await api('/admin/groups/' + encodeURIComponent(groupId));
+  currentGroupId = groupId;
+  document.getElementById('groupDetailPanel').style.display = 'block';
+  document.getElementById('groupDetailName').textContent = detail.name;
+  const body = document.getElementById('groupDetailBody');
+  body.innerHTML = '';
+  for (const d of detail.documents) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(d.title)}</td>
+      <td><button class="danger" onclick="removeDocFromGroup('${d.doc_id}')">Bỏ khỏi nhóm</button></td>`;
+    body.appendChild(tr);
+  }
+  document.getElementById('groupDetailPanel').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+function hideGroupDetail() {
+  currentGroupId = null;
+  document.getElementById('groupDetailPanel').style.display = 'none';
+}
+
+async function addDocToGroup() {
+  if (!currentGroupId) return;
+  const docId = document.getElementById('groupAddDocSelect').value;
+  if (!docId) return;
+  const result = await api(`/admin/groups/${encodeURIComponent(currentGroupId)}/documents`, {
+    method: 'POST', body: JSON.stringify({doc_ids: [docId]}),
+  });
+  toast(result.auto_granted
+    ? `Đã thêm vào nhóm — tự động cấp quyền cho ${result.members_extended} người đã có quyền trong nhóm`
+    : 'Đã thêm vào nhóm');
+  await showGroupDetail(currentGroupId);
+  await loadGroups();
+}
+
+async function removeDocFromGroup(docId) {
+  if (!currentGroupId) return;
+  await api(`/admin/groups/${encodeURIComponent(currentGroupId)}/documents/remove`, {
+    method: 'POST', body: JSON.stringify({doc_ids: [docId]}),
+  });
+  toast('Đã bỏ khỏi nhóm');
+  await showGroupDetail(currentGroupId);
+  await loadGroups();
+}
+
+async function deleteGroup() {
+  if (!currentGroupId) return;
+  if (!confirm('Xóa nhóm này? (không xóa tài liệu, chỉ xóa nhóm)')) return;
+  await api('/admin/groups/' + encodeURIComponent(currentGroupId), {method: 'DELETE'});
+  toast('Đã xóa nhóm');
+  currentGroupId = null;
+  document.getElementById('groupDetailPanel').style.display = 'none';
+  await loadGroups();
+}
+
+async function applyGroupToPending() {
+  const groupId = document.getElementById('pendingGroupSelect').value;
+  if (!groupId) { toast('Chọn 1 nhóm trước', true); return; }
+  const detail = await api('/admin/groups/' + encodeURIComponent(groupId));
+  const memberIds = new Set(detail.documents.map(d => d.doc_id));
+  document.querySelectorAll('.pendingDocCheck').forEach(c => {
+    if (memberIds.has(c.value)) c.checked = true;
+  });
+  toast(`Đã tick ${memberIds.size} tài liệu trong nhóm "${detail.name}"`);
+}
+
+async function grantByGroup() {
+  const group_id = document.getElementById('groupGrantSelect').value;
+  const machine_fingerprint = document.getElementById('groupGrantFingerprint').value.trim();
+  const label = document.getElementById('groupGrantLabel').value.trim();
+  const expiry = document.getElementById('groupGrantExpiry').value;
+  if (!group_id) { toast('Chọn 1 nhóm', true); return; }
+  if (machine_fingerprint.length !== 64) { toast('machine_fingerprint phải là chuỗi hex 64 ký tự', true); return; }
+  if (!expiry) { toast('Chưa chọn hạn dùng', true); return; }
+  const result = await api('/admin/licenses/grant_by_group', {method: 'POST', body: JSON.stringify({
+    group_id, machine_fingerprint, label: label || null, expires_at: new Date(expiry).toISOString(),
+  })});
+  toast(`Đã cấp ${result.granted.length} tài liệu trong nhóm`);
+  document.getElementById('groupGrantFingerprint').value = '';
+  document.getElementById('groupGrantLabel').value = '';
+  await loadLicenses();
+  await loadDocuments();
+}
+
+async function loadPending() {
+  const previouslyChecked = new Set(selectedPendingIds());
+  const rows = await api('/admin/pending?status=pending');
+  const body = document.getElementById('pendingBody');
+  body.innerHTML = '';
+  document.getElementById('pendingEmpty').style.display = rows.length ? 'none' : 'block';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const checked = previouslyChecked.has(r.id) ? 'checked' : '';
+    tr.innerHTML = `<td><input type="checkbox" class="pendingCheck" value="${r.id}" ${checked}></td>
+      <td>${escapeHtml(r.username || '')}</td><td>${escapeHtml(r.email)}</td><td class="fp">${shortFp(r.machine_fingerprint)}</td>
+      <td class="muted">${escapeHtml(r.note || '')}</td><td class="muted">${fmtDate(r.created_at)}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+function toggleSelectAllPending(cb) {
+  document.querySelectorAll('.pendingCheck').forEach(c => c.checked = cb.checked);
+}
+
+function selectedPendingIds() {
+  return [...document.querySelectorAll('.pendingCheck:checked')].map(c => parseInt(c.value));
+}
+
+function selectedDocIds() {
+  return [...document.querySelectorAll('.pendingDocCheck:checked')].map(c => c.value);
+}
+
+function toLocalDatetimeInputValue(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function applyExpiryDays() {
+  const days = parseInt(document.getElementById('pendingExpiryDays').value, 10);
+  if (!days || days < 1) return;
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  document.getElementById('pendingExpiry').value = toLocalDatetimeInputValue(date);
+}
+
+async function approveSelectedPending() {
+  const ids = selectedPendingIds();
+  const docIds = selectedDocIds();
+  const expiry = document.getElementById('pendingExpiry').value;
+  if (!ids.length) { toast('Chưa chọn yêu cầu nào', true); return; }
+  if (!docIds.length) { toast('Chưa chọn tài liệu nào để cấp', true); return; }
+  if (!expiry) { toast('Chưa chọn hạn dùng', true); return; }
+  const expiresAt = new Date(expiry).toISOString();
+  for (const id of ids) {
+    await api('/admin/pending/approve', {method: 'POST', body: JSON.stringify({request_id: id, doc_ids: docIds, expires_at: expiresAt})});
+  }
+  toast(`Đã duyệt ${ids.length} yêu cầu`);
+  await loadPending();
+  await loadLicenses();
+  await loadDocuments();
+}
+
+async function rejectSelectedPending() {
+  const ids = selectedPendingIds();
+  if (!ids.length) { toast('Chưa chọn yêu cầu nào', true); return; }
+  for (const id of ids) {
+    await api('/admin/pending/reject', {method: 'POST', body: JSON.stringify({request_id: id})});
+  }
+  toast(`Đã từ chối ${ids.length} yêu cầu`);
+  await loadPending();
+}
+
+async function grantLicense() {
+  const doc_id = document.getElementById('grantDocSelect').value;
+  const machine_fingerprint = document.getElementById('grantFingerprint').value.trim();
+  const label = document.getElementById('grantLabel').value.trim();
+  const expiry = document.getElementById('grantExpiry').value;
+  if (!doc_id) { toast('Chưa có tài liệu nào', true); return; }
+  if (machine_fingerprint.length !== 64) { toast('machine_fingerprint phải là chuỗi hex 64 ký tự', true); return; }
+  if (!expiry) { toast('Chưa chọn hạn dùng', true); return; }
+  await api('/admin/licenses', {method: 'POST', body: JSON.stringify({
+    doc_id, machine_fingerprint, label: label || null, expires_at: new Date(expiry).toISOString()
+  })});
+  toast('Đã cấp license');
+  // Same fingerprint = same person -- grant lands as one more row under
+  // their existing "Chi tiết" entry instead of a disconnected new one.
+  document.getElementById('grantFingerprint').value = '';
+  document.getElementById('grantLabel').value = '';
+  await loadLicenses();
+  await loadDocuments();
+  if (!document.getElementById('licenseFilterDoc').value && currentLicenseFingerprint === machine_fingerprint) {
+    showLicenseDetail(machine_fingerprint);
+  }
+}
+
+function licenseBadge(l, now) {
+  if (l.revoked) return '<span class="badge bad">đã thu hồi</span>';
+  if (new Date(l.expires_at) <= now) return '<span class="badge warn">hết hạn</span>';
+  return '<span class="badge ok">hoạt động</span>';
+}
+
+let allLicenses = [];
+let currentLicenseFingerprint = null;
+
+async function loadLicenses() {
+  const docId = document.getElementById('licenseFilterDoc').value;
+  const rows = await api('/admin/licenses' + (docId ? '?doc_id=' + encodeURIComponent(docId) : ''));
+  const body = document.getElementById('licensesBody');
+  body.innerHTML = '';
+  document.getElementById('licensesEmpty').style.display = rows.length ? 'none' : 'block';
+  const now = new Date();
+
+  if (docId) {
+    // Already scoped to one document -- a flat per-grant list is clear.
+    document.getElementById('licenseCol3').textContent = 'Hết hạn';
+    document.getElementById('licenseCol4').textContent = 'Trạng thái';
+    document.getElementById('licenseDetailPanel').style.display = 'none';
+    for (const l of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(l.label || '')}</td><td class="fp">${shortFp(l.machine_fingerprint)}</td>
+        <td class="muted">${fmtDate(l.expires_at)}</td><td>${licenseBadge(l, now)}</td>
+        <td>${l.revoked ? '' : `<button class="danger" onclick="revokeLicense('${l.doc_id}','${l.machine_fingerprint}')">Thu hồi</button>`}</td>`;
+      body.appendChild(tr);
+    }
+    return;
+  }
+
+  // "Tất cả" -- group by machine_fingerprint so one person's grants across
+  // many documents show as a single row (with a "Chi tiết" drill-down)
+  // instead of one disconnected row per document.
+  document.getElementById('licenseCol3').textContent = 'Số tài liệu';
+  document.getElementById('licenseCol4').textContent = '';
+  allLicenses = rows;
+  const byFp = new Map();
+  for (const l of rows) {
+    if (!byFp.has(l.machine_fingerprint)) byFp.set(l.machine_fingerprint, []);
+    byFp.get(l.machine_fingerprint).push(l);
+  }
+  for (const [fp, licenses] of byFp) {
+    const label = licenses.find(l => l.label)?.label || '';
+    const activeCount = licenses.filter(l => !l.revoked && new Date(l.expires_at) > now).length;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(label)}</td><td class="fp">${shortFp(fp)}</td>
+      <td>${licenses.length} tài liệu (${activeCount} hoạt động)</td><td></td>
+      <td><button onclick="showLicenseDetail('${fp}')">Chi tiết</button></td>`;
+    body.appendChild(tr);
+  }
+  if (currentLicenseFingerprint && byFp.has(currentLicenseFingerprint)) {
+    showLicenseDetail(currentLicenseFingerprint);
+  } else {
+    document.getElementById('licenseDetailPanel').style.display = 'none';
+    currentLicenseFingerprint = null;
+  }
+}
+
+function showLicenseDetail(fp) {
+  currentLicenseFingerprint = fp;
+  const licenses = allLicenses.filter(l => l.machine_fingerprint === fp);
+  const label = licenses.find(l => l.label)?.label || '';
+  document.getElementById('licenseDetailLabel').textContent = label ? `${label} (${shortFp(fp)})` : shortFp(fp);
+  document.getElementById('licenseDetailPanel').style.display = 'block';
+  const body = document.getElementById('licenseDetailBody');
+  body.innerHTML = '';
+  const now = new Date();
+  for (const l of licenses) {
+    const doc = documents.find(d => d.doc_id === l.doc_id);
+    const title = doc ? doc.title : l.doc_id;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(title)}</td><td class="muted">${fmtDate(l.expires_at)}</td><td>${licenseBadge(l, now)}</td>
+      <td>${l.revoked ? '' : `<button class="danger" onclick="revokeLicense('${l.doc_id}','${fp}')">Thu hồi</button>`}</td>`;
+    body.appendChild(tr);
+  }
+  document.getElementById('licenseDetailPanel').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+function hideLicenseDetail() {
+  currentLicenseFingerprint = null;
+  document.getElementById('licenseDetailPanel').style.display = 'none';
+}
+
+async function revokeLicense(docId, fp) {
+  if (!confirm('Thu hồi license này?')) return;
+  await api('/admin/licenses/revoke', {method: 'POST', body: JSON.stringify({doc_id: docId, machine_fingerprint: fp})});
+  toast('Đã thu hồi');
+  await loadLicenses();
+}
+
+async function loadLog() {
+  const docId = document.getElementById('logFilterDoc').value;
+  const rows = await api('/admin/access_log' + (docId ? '?doc_id=' + encodeURIComponent(docId) : ''));
+  const body = document.getElementById('logBody');
+  body.innerHTML = '';
+  document.getElementById('logEmpty').style.display = rows.length ? 'none' : 'block';
+  const titleByDocId = Object.fromEntries(documents.map(d => [d.doc_id, d.title]));
+  for (const r of rows) {
+    const cls = r.result === 'granted' ? 'ok' : 'bad';
+    const tr = document.createElement('tr');
+    const docLabel = titleByDocId[r.doc_id]
+      ? escapeHtml(titleByDocId[r.doc_id])
+      : `<code>${r.doc_id.slice(0, 8)}…</code>`;
+    tr.innerHTML = `<td class="muted">${fmtDate(r.at)}</td><td>${docLabel}</td>
+      <td class="fp">${shortFp(r.machine_fingerprint)}</td><td><span class="badge ${cls}">${r.result}</span></td>`;
+    body.appendChild(tr);
+  }
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : s;
+  return d.innerHTML;
+}
+
+async function loadAdminUsers() {
+  const rows = await api('/admin/users');
+  const body = document.getElementById('usersBody');
+  body.innerHTML = '';
+  document.getElementById('usersEmpty').style.display = rows.length ? 'none' : 'block';
+  const currentUsername = sessionStorage.getItem('pdfdrm_username');
+  for (const u of rows) {
+    const tr = document.createElement('tr');
+    const isSelf = u.username === currentUsername;
+    tr.innerHTML = `<td>${escapeHtml(u.username)}${isSelf ? ' <span class="muted">(bạn)</span>' : ''}</td>
+      <td class="muted">${fmtDate(u.created_at)}</td>
+      <td><button class="danger" data-role="delete-user">Xóa</button></td>`;
+    // Same reasoning as loadDocuments()/deleteDocument above: bind via
+    // closure instead of interpolating the username into onclick="...".
+    tr.querySelector('[data-role="delete-user"]').addEventListener('click', () => deleteAdminUser(u.username));
+    body.appendChild(tr);
+  }
+}
+
+async function createAdminUser() {
+  const username = document.getElementById('newUserName').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  if (!username) { toast('Nhập username', true); return; }
+  if (password.length < 8) { toast('Password phải tối thiểu 8 ký tự', true); return; }
+  await api('/admin/users', {method: 'POST', body: JSON.stringify({username, password})});
+  toast('Đã tạo tài khoản');
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPassword').value = '';
+  await loadAdminUsers();
+}
+
+async function deleteAdminUser(username) {
+  if (!confirm(`Xóa tài khoản "${username}"?`)) return;
+  await api('/admin/users/' + encodeURIComponent(username), {method: 'DELETE'});
+  toast('Đã xóa tài khoản');
+  await loadAdminUsers();
+}
+
+// auto re-poll pending + log every 20s while app is open
+setInterval(() => { if (document.getElementById('app').style.display !== 'none') { loadPending(); } }, 20000);
+
+// restore session
+const savedToken = sessionStorage.getItem('pdfdrm_token');
+if (savedToken) {
+  TOKEN = savedToken;
+  SERVER = sessionStorage.getItem('pdfdrm_server') || '';
+  showApp();
+}
+</script>
+</body>
+</html>

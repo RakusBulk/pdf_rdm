@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+server/drm.db
+server/storage/
+*.cpdf
+.pdf_drm_viewer/
+.DS_Store
+

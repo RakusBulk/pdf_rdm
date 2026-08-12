@@ -1,0 +1,46 @@
+name: Build viewer
+
+# Builds the SecureViewer app for both Windows and macOS on GitHub-hosted
+# runners -- no need to own a Windows machine to produce the .exe. The
+# Windows job also produces a proper Setup.exe installer via Inno Setup,
+# which ships preinstalled on the windows-latest runner image.
+# Trigger manually from the Actions tab, or automatically on a version tag.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "viewer-v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: dist/SecureViewer-macOS.zip
+            name: SecureViewer-macOS
+          - os: windows-latest
+            artifact: |
+              dist/SecureViewer-Windows.zip
+              dist/SecureViewer-Setup.exe
+            name: SecureViewer-Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: bash scripts/build_macos.sh
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: powershell -File scripts/build_windows.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.artifact }}
