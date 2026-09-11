@@ -176,16 +176,30 @@ QPushButton, QDialogButtonBox QPushButton {{
     border-radius: 6px;
     border: 1px solid #d0d0d0;
     background: white;
+    color: #222222;
 }}
 
 QPushButton:hover {{
     background: #f5f5f5;
 }}
 
+QDialog QLabel {{
+    color: #333333;
+}}
+
+QDialog QLabel#dialogTitle {{
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a1a;
+}}
+
 QDialog QLineEdit {{
+    background: white;
+    color: #1a1a1a;
     border: 1px solid #d0d0d0;
     border-radius: 5px;
     padding: 6px 8px;
+    selection-background-color: {ACCENT_BG};
 }}
 
 QDialog QLineEdit:focus {{
@@ -242,11 +256,23 @@ class FirstRunDialog(QDialog):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Secure PDF Viewer -- Setup")
+        self.setMinimumWidth(420)
+
+        title = QLabel("One-time setup")
+        title.setObjectName("dialogTitle")
+        subtitle = QLabel("This is sent to the license server as an access request.")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("color: #777777;")
+
         self.server_input = QLineEdit()
+        self.server_input.setPlaceholderText("https://your-server.com")
         self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Jane Doe")
         self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("jane@example.com")
 
         form = QFormLayout()
+        form.setSpacing(10)
         form.addRow("Server URL:", self.server_input)
         form.addRow("Your name:", self.username_input)
         form.addRow("Your email:", self.email_input)
@@ -256,6 +282,10 @@ class FirstRunDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
         layout.addLayout(form)
         layout.addWidget(buttons)
 
@@ -878,6 +908,13 @@ class Viewer(QMainWindow):
 
 def main() -> None:
     app = QApplication(sys.argv)
+    # Force a consistent style instead of the native one. On Windows in
+    # particular, the native "windowsvista" style pulls in the OS dark-mode
+    # palette for any control the stylesheet below doesn't fully repaint
+    # (QLineEdit background, QLabel text color) -- that's what produced the
+    # near-black input boxes / near-invisible labels on a light dialog.
+    # Fusion always renders purely from this stylesheet, on every platform.
+    app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
     win = Viewer()
     win.show()
