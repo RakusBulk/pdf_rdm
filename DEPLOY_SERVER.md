@@ -336,6 +336,11 @@ Từ chối ngay trong Telegram. Bot dùng long polling nên không cần mở t
    chỉ trả lời `/start` bằng ID của người gửi.
 4. `sudo systemctl restart pdf-drm`.
 
+Trong tin nhắn, nếu người dùng mở một tài liệu cụ thể thì có nút `Chỉ tài liệu: ...`
+(chọn sẵn) để cấp đúng tài liệu đó, kể cả khi nó chưa thuộc nhóm nào. Hạn dùng chọn
+bằng nút 30 / 60 / 180 ngày hoặc `Tự nhập số ngày` rồi gõ số (1-3650) gửi cho bot.
+`TELEGRAM_APPROVE_DAYS` là giá trị mặc định.
+
 Không đặt `TELEGRAM_BOT_TOKEN` thì tính năng này tắt hoàn toàn. Gửi thông báo bị
 giới hạn 8 tin/phút và không lặp lại cho cùng một máy trong 10 phút, nên yêu cầu
 spam không làm ngập Telegram (mọi yêu cầu vẫn nằm trên dashboard).
