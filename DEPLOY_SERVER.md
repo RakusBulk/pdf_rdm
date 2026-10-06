@@ -312,3 +312,30 @@ SQLite). Nếu thật sự cần scale cao hơn nữa:
 2. Nếu vẫn chưa đủ, cân nhắc chuyển sang Postgres thay vì chạy nhiều
    `uvicorn` worker cùng ghi 1 file SQLite (rủi ro khóa cao, không được
    SQLite khuyến nghị cho multi-process ghi đồng thời qua nhiều worker).
+
+---
+
+## Thông báo và duyệt yêu cầu qua Telegram (tùy chọn)
+
+Khi có người gửi yêu cầu truy cập, bot nhắn riêng cho quản trị viên, kèm tên tài
+liệu người dùng muốn mở và danh sách nhóm tài liệu. Chọn nhóm rồi bấm Duyệt hoặc
+Từ chối ngay trong Telegram. Bot dùng long polling nên không cần mở thêm port.
+
+1. Tạo bot qua @BotFather, lấy token. Cần `pip install requests` (đã có trong `requirements.txt`).
+2. Gửi `/start` cho bot để biết Telegram user ID của bạn.
+3. Thêm vào `/etc/pdf-drm.env` (quyền 640, không commit token):
+
+   ```
+   TELEGRAM_BOT_TOKEN=token-tu-botfather
+   TELEGRAM_ALLOWED_USER_IDS=123456789
+   TELEGRAM_APPROVE_DAYS=180
+   ```
+
+   `TELEGRAM_ALLOWED_USER_IDS` là danh sách ID cách nhau bằng dấu phẩy. Chỉ những
+   ID này nhận thông báo và bấm duyệt được; người khác bị bỏ qua. Để trống thì bot
+   chỉ trả lời `/start` bằng ID của người gửi.
+4. `sudo systemctl restart pdf-drm`.
+
+Không đặt `TELEGRAM_BOT_TOKEN` thì tính năng này tắt hoàn toàn. Gửi thông báo bị
+giới hạn 8 tin/phút và không lặp lại cho cùng một máy trong 10 phút, nên yêu cầu
+spam không làm ngập Telegram (mọi yêu cầu vẫn nằm trên dashboard).

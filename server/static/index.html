@@ -60,6 +60,14 @@
   .badge.bad { background: var(--accent-bg); color: var(--accent); }
   .badge.warn { background: var(--warn-bg); }
   .muted { color: var(--muted); }
+  button.expander { border: none; background: none; padding: 0 6px 0 0; color: var(--muted); font-size: 12px; width: 22px; }
+  tr.pending-group td { background: rgba(127,127,127,0.04); }
+  tr.pending-detail > td { padding: 0 10px 10px 36px; background: rgba(127,127,127,0.03); }
+  table.subtable { margin-top: 4px; }
+  table.subtable th, table.subtable td { padding: 6px 8px; }
+  a.doclink { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  td.actions { white-space: nowrap; }
+  td.actions button { padding: 3px 10px; font-size: 12px; }
   .empty { color: var(--muted); padding: 20px; text-align: center; }
   #login { max-width: 380px; margin: 15vh auto; }
   #login .panel { text-align: center; }
@@ -189,10 +197,11 @@
       <div class="panel">
         <h2>Yêu cầu truy cập đang chờ</h2>
         <table>
-          <thead><tr><th><input type="checkbox" id="pendingSelectAll" onclick="toggleSelectAllPending(this)"></th><th>Username</th><th>Email</th><th>Fingerprint</th><th>Ghi chú</th><th>Lúc</th></tr></thead>
+          <thead><tr><th><input type="checkbox" id="pendingSelectAll" onclick="toggleSelectAllPending(this)"></th><th>Tài khoản</th><th>Email</th><th>Yêu cầu</th><th>Gần nhất</th><th>Thao tác</th></tr></thead>
           <tbody id="pendingBody"></tbody>
         </table>
         <div id="pendingEmpty" class="empty" style="display:none">Không có yêu cầu nào đang chờ.</div>
+        <div class="muted" style="margin-top:8px;font-size:12px">Bấm ▶ để xem từng yêu cầu của tài khoản. Nút Duyệt dùng tài liệu và hạn dùng chọn ở khung bên dưới.</div>
       </div>
       <div class="panel">
         <h2>Duyệt các yêu cầu đã chọn</h2>
@@ -684,24 +693,117 @@ async function grantByGroup() {
   await loadDocuments();
 }
 
+// Requests from the same account (same email) share one row; the arrow
+// expands it to show each individual request.
+const pendingExpanded = new Set();
+
+function groupPending(rows) {
+  const map = new Map();
+  for (const r of rows) {
+    const email = (r.email || '').trim().toLowerCase();
+    const key = email || 'u:' + (r.username || '').trim().toLowerCase();
+    if (!map.has(key)) map.set(key, {key, email: r.email || '', username: '', items: []});
+    map.get(key).items.push(r);
+  }
+  const groups = [...map.values()];
+  for (const g of groups) {
+    g.items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    g.latest = g.items[0].created_at;
+    g.username = g.items[0].username || '';
+  }
+  groups.sort((a, b) => (a.latest < b.latest ? 1 : -1));
+  return groups;
+}
+
 async function loadPending() {
   const previouslyChecked = new Set(selectedPendingIds());
   const rows = await api('/admin/pending?status=pending');
   const body = document.getElementById('pendingBody');
   body.innerHTML = '';
   document.getElementById('pendingEmpty').style.display = rows.length ? 'none' : 'block';
-  for (const r of rows) {
+  const groups = groupPending(rows);
+  const liveKeys = new Set(groups.map(g => g.key));
+  for (const k of [...pendingExpanded]) if (!liveKeys.has(k)) pendingExpanded.delete(k);
+  groups.forEach((g, gi) => {
+    const open = pendingExpanded.has(g.key);
+    const checkedCount = g.items.filter(r => previouslyChecked.has(r.id)).length;
+    const ids = g.items.map(r => r.id).join(',');
+    const machines = new Set(g.items.map(r => r.machine_fingerprint)).size;
+    const titles = [...new Set(g.items.map(r => r.requested_doc_title).filter(Boolean))];
+    const docSummary = titles.length
+      ? escapeHtml(titles.slice(0, 2).join(', ')) + (titles.length > 2 ? ` +${titles.length - 2}` : '')
+      : '';
     const tr = document.createElement('tr');
-    const checked = previouslyChecked.has(r.id) ? 'checked' : '';
-    tr.innerHTML = `<td><input type="checkbox" class="pendingCheck" value="${r.id}" ${checked}></td>
-      <td>${escapeHtml(r.username || '')}</td><td>${escapeHtml(r.email)}</td><td class="fp">${shortFp(r.machine_fingerprint)}</td>
-      <td class="muted">${escapeHtml(r.note || '')}</td><td class="muted">${fmtDate(r.created_at)}</td>`;
+    tr.className = 'pending-group';
+    tr.innerHTML = `<td><input type="checkbox" class="pendingGroupCheck" ${checkedCount === g.items.length ? 'checked' : ''} onchange="toggleGroupPending(this)"></td>
+      <td><button class="expander" title="Xem chi tiết từng yêu cầu" aria-expanded="${open}" onclick="togglePendingGroup(${gi})">${open ? '▼' : '▶'}</button><strong>${escapeHtml(g.username)}</strong></td>
+      <td>${escapeHtml(g.email)}</td>
+      <td><span class="badge warn">${g.items.length} yêu cầu</span> <span class="muted">${machines} máy</span>
+        ${docSummary ? `<div class="muted" style="font-size:12px;margin-top:2px">Muốn mở: ${docSummary}</div>` : ''}</td>
+      <td class="muted">${fmtDate(g.latest)}</td>
+      <td class="actions"><button class="primary" onclick="approvePending([${ids}])">Duyệt tất cả</button>
+        <button class="danger" onclick="rejectPending([${ids}])">Từ chối tất cả</button></td>`;
+    tr.querySelector('.pendingGroupCheck').indeterminate = checkedCount > 0 && checkedCount < g.items.length;
+    tr.dataset.key = g.key;
     body.appendChild(tr);
-  }
+
+    const dr = document.createElement('tr');
+    dr.className = 'pending-detail';
+    dr.style.display = open ? '' : 'none';
+    dr.innerHTML = `<td></td><td colspan="5"><table class="subtable">
+      <thead><tr><th></th><th>Fingerprint</th><th>Muốn mở tài liệu / Ghi chú</th><th>Lúc</th><th>Thao tác</th></tr></thead>
+      <tbody>${g.items.map(r => `<tr>
+        <td><input type="checkbox" class="pendingCheck" value="${r.id}" ${previouslyChecked.has(r.id) ? 'checked' : ''} onchange="syncGroupCheck(this)"></td>
+        <td class="fp" title="${escapeAttr(r.machine_fingerprint)}">${shortFp(r.machine_fingerprint)}</td>
+        <td>${r.requested_doc_id
+          ? `<a href="#" class="doclink" title="Tick tài liệu này ở khung duyệt bên dưới" data-doc="${escapeAttr(r.requested_doc_id)}" onclick="tickPendingDoc(this.dataset.doc); return false;">${escapeHtml(r.requested_doc_title || r.requested_doc_id)}</a>`
+          : `<span class="muted">${escapeHtml(r.note || '')}</span>`}</td>
+        <td class="muted">${fmtDate(r.created_at)}</td>
+        <td class="actions"><button class="primary" onclick="approvePending([${r.id}])">Duyệt</button>
+          <button class="danger" onclick="rejectPending([${r.id}])">Từ chối</button></td></tr>`).join('')}</tbody></table></td>`;
+    body.appendChild(dr);
+  });
+  // keep the global "select all" box consistent after a refresh
+  const all = document.querySelectorAll('.pendingCheck');
+  document.getElementById('pendingSelectAll').checked = all.length > 0 && [...all].every(c => c.checked);
+}
+
+function tickPendingDoc(docId) {
+  const box = [...document.querySelectorAll('.pendingDocCheck')].find(c => c.value === docId);
+  if (!box) { toast('Không tìm thấy tài liệu trong danh sách', true); return; }
+  box.checked = true;
+  box.scrollIntoView({block: 'center', behavior: 'smooth'});
+  toast('Đã tick tài liệu ở khung duyệt bên dưới');
+}
+
+function togglePendingGroup(gi) {
+  const tr = document.querySelectorAll('#pendingBody tr.pending-group')[gi];
+  const detail = tr.nextElementSibling;
+  const open = detail.style.display === 'none';
+  detail.style.display = open ? '' : 'none';
+  const btn = tr.querySelector('.expander');
+  btn.textContent = open ? '▼' : '▶';
+  btn.setAttribute('aria-expanded', String(open));
+  if (open) pendingExpanded.add(tr.dataset.key); else pendingExpanded.delete(tr.dataset.key);
+}
+
+function toggleGroupPending(cb) {
+  const detail = cb.closest('tr').nextElementSibling;
+  detail.querySelectorAll('.pendingCheck').forEach(c => c.checked = cb.checked);
+  cb.indeterminate = false;
+}
+
+function syncGroupCheck(cb) {
+  const detail = cb.closest('tr.pending-detail');
+  const boxes = [...detail.querySelectorAll('.pendingCheck')];
+  const n = boxes.filter(c => c.checked).length;
+  const g = detail.previousElementSibling.querySelector('.pendingGroupCheck');
+  g.checked = n === boxes.length;
+  g.indeterminate = n > 0 && n < boxes.length;
 }
 
 function toggleSelectAllPending(cb) {
-  document.querySelectorAll('.pendingCheck').forEach(c => c.checked = cb.checked);
+  document.querySelectorAll('.pendingCheck, .pendingGroupCheck').forEach(c => { c.checked = cb.checked; c.indeterminate = false; });
 }
 
 function selectedPendingIds() {
@@ -725,30 +827,45 @@ function applyExpiryDays() {
   document.getElementById('pendingExpiry').value = toLocalDatetimeInputValue(date);
 }
 
-async function approveSelectedPending() {
-  const ids = selectedPendingIds();
+function approveSelectedPending() { return approvePending(selectedPendingIds()); }
+function rejectSelectedPending() { return rejectPending(selectedPendingIds()); }
+
+// Approve/reject a list of request ids (one request, a whole account, or the ticked ones).
+// Documents and expiry come from the form in the panel below.
+async function approvePending(ids) {
   const docIds = selectedDocIds();
   const expiry = document.getElementById('pendingExpiry').value;
   if (!ids.length) { toast('Chưa chọn yêu cầu nào', true); return; }
-  if (!docIds.length) { toast('Chưa chọn tài liệu nào để cấp', true); return; }
-  if (!expiry) { toast('Chưa chọn hạn dùng', true); return; }
+  if (!docIds.length) { toast('Chưa chọn tài liệu nào để cấp (khung "Duyệt các yêu cầu" bên dưới)', true); return; }
+  if (!expiry) { toast('Chưa chọn hạn dùng (khung bên dưới)', true); return; }
   const expiresAt = new Date(expiry).toISOString();
-  for (const id of ids) {
-    await api('/admin/pending/approve', {method: 'POST', body: JSON.stringify({request_id: id, doc_ids: docIds, expires_at: expiresAt})});
+  let done = 0;
+  try {
+    for (const id of ids) {
+      await api('/admin/pending/approve', {method: 'POST', body: JSON.stringify({request_id: id, doc_ids: docIds, expires_at: expiresAt})});
+      done++;
+    }
+    toast(`Đã duyệt ${done} yêu cầu`);
+  } catch (e) {
+    toast(`Đã duyệt ${done}/${ids.length} yêu cầu, lỗi: ${e.message}`, true);
   }
-  toast(`Đã duyệt ${ids.length} yêu cầu`);
   await loadPending();
   await loadLicenses();
   await loadDocuments();
 }
 
-async function rejectSelectedPending() {
-  const ids = selectedPendingIds();
+async function rejectPending(ids) {
   if (!ids.length) { toast('Chưa chọn yêu cầu nào', true); return; }
-  for (const id of ids) {
-    await api('/admin/pending/reject', {method: 'POST', body: JSON.stringify({request_id: id})});
+  let done = 0;
+  try {
+    for (const id of ids) {
+      await api('/admin/pending/reject', {method: 'POST', body: JSON.stringify({request_id: id})});
+      done++;
+    }
+    toast(`Đã từ chối ${done} yêu cầu`);
+  } catch (e) {
+    toast(`Đã từ chối ${done}/${ids.length} yêu cầu, lỗi: ${e.message}`, true);
   }
-  toast(`Đã từ chối ${ids.length} yêu cầu`);
   await loadPending();
 }
 
@@ -890,6 +1007,11 @@ function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = s == null ? '' : s;
   return d.innerHTML;
+}
+
+// For values placed inside an HTML attribute (escapeHtml leaves quotes alone).
+function escapeAttr(s) {
+  return escapeHtml(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function loadAdminUsers() {

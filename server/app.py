@@ -17,12 +17,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from common import crypto
+from server import telegram_bot
 from server.database import get_conn, init_db
 
 app = FastAPI(title="pdf-drm license server")
@@ -53,13 +54,14 @@ def _startup() -> None:
             f"Set the {ADMIN_TOKEN_ENV} environment variable before starting "
             "the server (it protects the admin endpoints)."
         )
+    telegram_bot.start(approve=_telegram_approve, reject=_telegram_reject)
 
 
 def hash_password(password: str, salt: bytes | None = None) -> tuple[str, str]:
     salt = salt or os.urandom(16)
     # N=2**17 (OWASP's current minimum for scrypt, ~128MiB/hash) rather than
     # the much cheaper 2**14 this used to run at.
-    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**17, r=8, p=1, dklen=32)
+    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**17, r=8, p=1, dklen=32, maxmem=2**28)
     return digest.hex(), salt.hex()
 
 
@@ -538,8 +540,13 @@ def access_log(doc_id: str | None = None, limit: int = 200):
 @app.get("/admin/pending", dependencies=[Depends(require_admin)])
 def list_pending(status: str = "pending"):
     with get_conn() as conn:
+        # The viewer puts the doc_id in `note` when a file was denied; resolve it
+        # to the document so the dashboard can show what the user wants to open.
         rows = conn.execute(
-            "SELECT * FROM pending_requests WHERE status = ? ORDER BY id", (status,)
+            """SELECT p.*, d.doc_id AS requested_doc_id, d.title AS requested_doc_title
+               FROM pending_requests p LEFT JOIN documents d ON d.doc_id = p.note
+               WHERE p.status = ? ORDER BY p.id""",
+            (status,),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -598,6 +605,14 @@ def reject_pending(body: RejectPending):
     return {"status": "ok"}
 
 
+def _telegram_approve(request_id: int, doc_ids: list[str], expires_at: str) -> dict:
+    return approve_pending(ApprovePending(request_id=request_id, doc_ids=doc_ids, expires_at=expires_at))
+
+
+def _telegram_reject(request_id: int) -> dict:
+    return reject_pending(RejectPending(request_id=request_id))
+
+
 # ---------- admin user accounts (login with username/password instead of
 # the shared PDF_DRM_ADMIN_TOKEN). The token still works as a bootstrap /
 # break-glass credential -- it's needed to create the first account, and
@@ -631,10 +646,11 @@ def list_admin_users():
 @app.delete("/admin/users/{username}", dependencies=[Depends(require_admin)])
 def delete_admin_user(username: str):
     with get_conn() as conn:
+        # sessions reference admin_users via FK, so they must go first
+        conn.execute("DELETE FROM admin_sessions WHERE username = ?", (username,))
         cur = conn.execute("DELETE FROM admin_users WHERE username = ?", (username,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Unknown username")
-        conn.execute("DELETE FROM admin_sessions WHERE username = ?", (username,))
     return {"status": "ok"}
 
 
@@ -666,7 +682,7 @@ def logout(x_admin_token: str = Header(default="")):
 # ---------- public self-service endpoint ----------
 
 @app.post("/request-access")
-def request_access(body: AccessRequest):
+def request_access(body: AccessRequest, background_tasks: BackgroundTasks):
     if "@" not in body.email or len(body.email) > 254:
         raise HTTPException(status_code=422, detail="Invalid email")
     if not body.username.strip():
@@ -679,7 +695,11 @@ def request_access(body: AccessRequest):
                VALUES (?, ?, ?, ?)""",
             (body.machine_fingerprint, body.username, body.email, body.note),
         )
-        return {"request_id": cur.lastrowid, "status": "pending"}
+        request_id = cur.lastrowid
+    # Runs after the response is sent and the row is committed; a Telegram
+    # outage can never fail or slow the request itself.
+    background_tasks.add_task(telegram_bot.notify_new_request, request_id, body.machine_fingerprint)
+    return {"request_id": request_id, "status": "pending"}
 
 
 # ---------- client endpoint ----------
