@@ -6,82 +6,115 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
-    --bg: #f7f7f8; --panel: #ffffff; --text: #1a1a1a; --muted: #6b7280;
-    --border: #e5e7eb; --accent: #b91c1c; --accent-bg: #fee2e2;
-    --ok: #15803d; --ok-bg: #dcfce7; --warn-bg: #fef3c7;
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1a1d23; --muted: #6b7280;
+    --border: #e3e6ea; --accent: #b91c1c; --accent-hover: #991b1b; --accent-bg: #fee2e2;
+    --ok: #15803d; --ok-bg: #dcfce7; --warn-bg: #fef3c7; --warn: #92400e;
+    --on-accent: #ffffff; --row-hover: rgba(127,127,127,0.07); --shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.06);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16171a; --panel: #1f2023; --text: #e8e8ea; --muted: #9aa0a6;
-      --border: #33353a; --accent: #f87171; --accent-bg: #3a1c1c;
-      --ok: #4ade80; --ok-bg: #123a20; --warn-bg: #3a2f0c;
+      --bg: #121316; --panel: #1b1d21; --text: #ececee; --muted: #9aa0a6;
+      --border: #2d3036; --accent: #f87171; --accent-hover: #fca5a5; --accent-bg: #3a1c1c;
+      --ok: #4ade80; --ok-bg: #123a20; --warn-bg: #3a2f0c; --warn: #fcd34d;
+      --on-accent: #2b0d0d; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
     }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
   header {
+    position: sticky; top: 0; z-index: 10;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
+    padding: 14px 32px; border-bottom: 1px solid var(--border); background: var(--panel);
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
   }
-  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header h1 { font-size: 21px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
   header h1 span { color: var(--accent); }
-  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  nav.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  main { max-width: 1480px; width: 100%; margin: 0 auto; padding: 28px 32px 48px; }
+  nav.tabs { display: flex; gap: 6px; margin-bottom: 24px; border-bottom: 1px solid var(--border); overflow-x: auto; }
   nav.tabs button {
-    background: none; border: none; padding: 10px 16px; cursor: pointer;
-    color: var(--muted); font-size: 14px; border-bottom: 2px solid transparent;
+    background: none; border: none; border-radius: 0; padding: 13px 22px; cursor: pointer; white-space: nowrap;
+    color: var(--muted); font-size: 15.5px; border-bottom: 3px solid transparent; margin-bottom: -1px;
+    transition: color .15s, border-color .15s;
   }
+  nav.tabs button:hover { color: var(--text); border-color: var(--border); }
   nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  .panel h2 { margin: 0 0 12px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-  th { color: var(--muted); font-weight: 500; }
-  tr:hover td { background: rgba(127,127,127,0.06); }
-  code { font-size: 12px; background: rgba(127,127,127,0.12); padding: 2px 5px; border-radius: 4px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 28px; margin-bottom: 24px; box-shadow: var(--shadow); overflow-x: auto;
+  }
+  .panel h2 { margin: 0 0 18px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tr:hover > td { background: var(--row-hover); }
+  code { font-size: 13px; background: rgba(127,127,127,0.13); padding: 3px 7px; border-radius: 6px; }
+  td code { white-space: nowrap; }
   button {
     cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text);
-    padding: 6px 12px; border-radius: 6px; font-size: 13px;
+    padding: 9px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; line-height: 1.3;
+    transition: background .15s, border-color .15s, box-shadow .15s;
   }
   button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 1px; }
   button.danger { color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button.danger:hover { background: var(--accent-bg); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  td button { white-space: nowrap; padding: 7px 14px; font-size: 13.5px; }
+  td > button + button { margin-left: 6px; }
+  td:has(> button) { white-space: nowrap; }
   input, select {
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
-    padding: 6px 8px; border-radius: 6px; font-size: 13px;
+    padding: 10px 13px; border-radius: 8px; font-size: 14.5px; font-family: inherit;
   }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  .row label { color: var(--muted); font-size: 12px; margin-right: -4px; }
-  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  input:focus, select:focus { border-color: var(--accent); }
+  input[type=checkbox] { width: 18px; height: 18px; padding: 0; accent-color: var(--accent); vertical-align: middle; cursor: pointer; }
+  input[type=file]::file-selector-button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px;
+    padding: 6px 12px; margin-right: 10px; cursor: pointer;
+  }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .row label { color: var(--muted); font-size: 14px; margin-right: -2px; }
+  .badge { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 13px; font-weight: 500; }
   .badge.ok { background: var(--ok-bg); color: var(--ok); }
   .badge.bad { background: var(--accent-bg); color: var(--accent); }
-  .badge.warn { background: var(--warn-bg); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
   .muted { color: var(--muted); }
-  button.expander { border: none; background: none; padding: 0 6px 0 0; color: var(--muted); font-size: 12px; width: 22px; }
-  tr.pending-group td { background: rgba(127,127,127,0.04); }
-  tr.pending-detail > td { padding: 0 10px 10px 36px; background: rgba(127,127,127,0.03); }
-  table.subtable { margin-top: 4px; }
-  table.subtable th, table.subtable td { padding: 6px 8px; }
-  a.doclink { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  button.expander { border: none; background: none; padding: 0 8px 0 0; color: var(--muted); font-size: 14px; width: 28px; }
+  button.expander:hover { color: var(--accent); }
+  tr.pending-group > td { background: rgba(127,127,127,0.05); }
+  tr.pending-detail > td { padding: 0 16px 16px 52px; background: rgba(127,127,127,0.03); }
+  table.subtable { margin-top: 6px; }
+  table.subtable th, table.subtable td { padding: 10px 12px; }
+  a.doclink { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); font-weight: 500; }
   td.actions { white-space: nowrap; }
-  td.actions button { padding: 3px 10px; font-size: 12px; }
-  .empty { color: var(--muted); padding: 20px; text-align: center; }
-  #login { max-width: 380px; margin: 15vh auto; }
-  #login .panel { text-align: center; }
+  td.actions button { padding: 7px 14px; font-size: 13.5px; }
+  .empty { color: var(--muted); padding: 36px 20px; text-align: center; font-size: 15px; }
+  #login { max-width: 440px; margin: 12vh auto; padding: 0 16px; }
+  #login .panel { text-align: center; padding: 32px; }
   #login input { width: 100%; margin: 10px 0; }
-  #login button { width: 100%; }
+  #login button { width: 100%; padding: 12px; font-size: 15px; }
   .toast {
-    position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--border);
-    padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); font-size: 13px;
-    max-width: 320px;
+    position: fixed; bottom: 28px; right: 28px; background: var(--panel); border: 1px solid var(--border);
+    padding: 14px 20px; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); font-size: 14.5px;
+    max-width: 420px; z-index: 50;
   }
   .toast.error { border-color: var(--accent); color: var(--accent); }
-  .checkbox-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
-  .checkbox-list label { display: block; padding: 3px 0; font-size: 13px; cursor: pointer; }
-  .fp { font-family: ui-monospace, monospace; }
+  .checkbox-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--bg); }
+  .checkbox-list label { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 14.5px; cursor: pointer; }
+  .checkbox-list label:hover { color: var(--accent); }
+  .fp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; }
+  @media (max-width: 800px) {
+    header { padding: 12px 16px; }
+    main { padding: 16px 12px 32px; }
+    .panel { padding: 16px; border-radius: 12px; }
+    nav.tabs button { padding: 11px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -128,7 +161,7 @@
       <div class="panel">
         <h2>Mã hóa &amp; tải lên tài liệu mới</h2>
         <div class="row">
-          <input id="uploadTitle" type="text" placeholder="Tên tài liệu" style="width:220px">
+          <input id="uploadTitle" type="text" placeholder="Tên tài liệu" style="width:300px">
           <input id="uploadFile" type="file" accept="application/pdf">
           <button class="primary" onclick="uploadDocument()">Mã hóa &amp; tải lên</button>
         </div>
@@ -149,7 +182,7 @@
       <div class="panel">
         <h2>Tạo nhóm mới</h2>
         <div class="row">
-          <input id="newGroupName" type="text" placeholder="Tên nhóm (vd. Báo cáo Q3)" style="width:280px">
+          <input id="newGroupName" type="text" placeholder="Tên nhóm (vd. Báo cáo Q3)" style="width:340px">
         </div>
         <div class="row"><label>Chọn tài liệu đưa vào nhóm:</label></div>
         <div class="checkbox-list" id="newGroupDocList"></div>
@@ -185,7 +218,7 @@
         <p class="muted">Cấp toàn bộ tài liệu trong 1 nhóm cho 1 máy trong một lần bấm, thay vì chọn từng tài liệu.</p>
         <div class="row">
           <select id="groupGrantSelect"></select>
-          <input id="groupGrantFingerprint" type="text" placeholder="machine_fingerprint (64 hex)" style="width:280px" class="fp">
+          <input id="groupGrantFingerprint" type="text" placeholder="machine_fingerprint (64 hex)" style="width:560px;max-width:100%" class="fp">
           <input id="groupGrantLabel" type="text" placeholder="Tên hiển thị / email (watermark)">
           <input id="groupGrantExpiry" type="datetime-local">
           <button class="primary" onclick="grantByGroup()">Cấp cho cả nhóm</button>
@@ -201,7 +234,7 @@
           <tbody id="pendingBody"></tbody>
         </table>
         <div id="pendingEmpty" class="empty" style="display:none">Không có yêu cầu nào đang chờ.</div>
-        <div class="muted" style="margin-top:8px;font-size:12px">Bấm ▶ để xem từng yêu cầu của tài khoản. Nút Duyệt dùng tài liệu và hạn dùng chọn ở khung bên dưới.</div>
+        <div class="muted" style="margin-top:12px;font-size:13px">Bấm ▶ để xem từng yêu cầu của tài khoản. Nút Duyệt dùng tài liệu và hạn dùng chọn ở khung bên dưới.</div>
       </div>
       <div class="panel">
         <h2>Duyệt các yêu cầu đã chọn</h2>
@@ -214,7 +247,7 @@
         <div class="checkbox-list" id="pendingDocList"></div>
         <div class="row" style="margin-top:10px">
           <label>Số ngày hết hạn</label>
-          <input id="pendingExpiryDays" type="number" min="1" placeholder="vd. 30" style="width:80px" oninput="applyExpiryDays()">
+          <input id="pendingExpiryDays" type="number" min="1" placeholder="vd. 30" style="width:110px" oninput="applyExpiryDays()">
           <label class="muted">hoặc chọn ngày cụ thể</label>
           <input id="pendingExpiry" type="datetime-local">
           <button class="primary" onclick="approveSelectedPending()">Duyệt đã chọn</button>
@@ -228,7 +261,7 @@
         <h2>Cấp license trực tiếp</h2>
         <div class="row">
           <select id="grantDocSelect"></select>
-          <input id="grantFingerprint" type="text" placeholder="machine_fingerprint (64 hex)" style="width:280px" class="fp">
+          <input id="grantFingerprint" type="text" placeholder="machine_fingerprint (64 hex)" style="width:560px;max-width:100%" class="fp">
           <input id="grantLabel" type="text" placeholder="Tên hiển thị / email (watermark)">
           <input id="grantExpiry" type="datetime-local">
           <button class="primary" onclick="grantLicense()">Cấp</button>
@@ -277,8 +310,8 @@
       <div class="panel">
         <h2>Tạo tài khoản quản trị</h2>
         <div class="row">
-          <input id="newUserName" type="text" placeholder="Username" style="width:160px">
-          <input id="newUserPassword" type="password" placeholder="Password (tối thiểu 8 ký tự)" style="width:220px">
+          <input id="newUserName" type="text" placeholder="Username" style="width:220px">
+          <input id="newUserPassword" type="password" placeholder="Password (tối thiểu 8 ký tự)" style="width:300px">
           <button class="primary" onclick="createAdminUser()">Tạo tài khoản</button>
         </div>
       </div>
@@ -739,7 +772,7 @@ async function loadPending() {
       <td><button class="expander" title="Xem chi tiết từng yêu cầu" aria-expanded="${open}" onclick="togglePendingGroup(${gi})">${open ? '▼' : '▶'}</button><strong>${escapeHtml(g.username)}</strong></td>
       <td>${escapeHtml(g.email)}</td>
       <td><span class="badge warn">${g.items.length} yêu cầu</span> <span class="muted">${machines} máy</span>
-        ${docSummary ? `<div class="muted" style="font-size:12px;margin-top:2px">Muốn mở: ${docSummary}</div>` : ''}</td>
+        ${docSummary ? `<div class="muted" style="font-size:13px;margin-top:3px">Muốn mở: ${docSummary}</div>` : ''}</td>
       <td class="muted">${fmtDate(g.latest)}</td>
       <td class="actions"><button class="primary" onclick="approvePending([${ids}])">Duyệt tất cả</button>
         <button class="danger" onclick="rejectPending([${ids}])">Từ chối tất cả</button></td>`;
