@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -213,9 +214,15 @@ async def upload_document(title: str = Form(""), file: UploadFile = File(...)):
     if len(pdf_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 300MB)")
 
-    key = crypto.generate_key()
-    doc_id, blob = crypto.encrypt_pdf(pdf_bytes, key)
-    (STORAGE_DIR / f"{doc_id}.cpdf").write_bytes(blob)
+    # Encryption of a large PDF is CPU-bound: run it off the event loop so
+    # license checks from viewers aren't stalled during (batch) uploads.
+    def _encrypt_and_store() -> tuple[bytes, str, bytes]:
+        key = crypto.generate_key()
+        doc_id, blob = crypto.encrypt_pdf(pdf_bytes, key)
+        (STORAGE_DIR / f"{doc_id}.cpdf").write_bytes(blob)
+        return key, doc_id, blob
+
+    key, doc_id, blob = await run_in_threadpool(_encrypt_and_store)
 
     with get_conn() as conn:
         conn.execute(

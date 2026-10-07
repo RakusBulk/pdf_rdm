@@ -162,11 +162,13 @@
         <h2>Mã hóa &amp; tải lên tài liệu mới</h2>
         <div class="row">
           <input id="uploadTitle" type="text" placeholder="Tên tài liệu (bỏ trống = lấy theo tên file)" style="width:380px;max-width:100%">
-          <input id="uploadFile" type="file" accept="application/pdf" onchange="onUploadFileChosen()">
-          <button class="primary" onclick="uploadDocument()">Mã hóa &amp; tải lên</button>
+          <input id="uploadFile" type="file" accept="application/pdf,.pdf" multiple onchange="onUploadFileChosen()">
+          <button class="primary" id="uploadBtn" onclick="uploadDocument()">Mã hóa &amp; tải lên</button>
         </div>
-        <p class="muted">File PDF được mã hóa ngay trên server (AES-256-GCM) và lưu lại để tải về
-          bất cứ lúc nào — không cần dùng CLI. Tối đa 300MB/file.</p>
+        <div id="uploadProgress" style="display:none; margin:4px 0 12px"></div>
+        <p class="muted">Chọn một hoặc nhiều file PDF; các file được mã hóa lần lượt ngay trên server
+          (AES-256-GCM) và lưu lại để tải về bất cứ lúc nào — không cần dùng CLI. Tối đa 300MB/file.
+          Nhiều file: tên tài liệu lấy theo tên từng file.</p>
       </div>
       <div class="panel">
         <h2>Tài liệu đã mã hóa</h2>
@@ -511,21 +513,32 @@ function titleFromFilename(name) {
 }
 
 function onUploadFileChosen() {
-  const f = document.getElementById('uploadFile').files[0];
-  document.getElementById('uploadTitle').placeholder = f ? titleFromFilename(f.name) : UPLOAD_TITLE_PLACEHOLDER;
+  const files = [...document.getElementById('uploadFile').files];
+  const title = document.getElementById('uploadTitle');
+  if (files.length > 1) {
+    // A single typed title can't apply to many files: each takes its own file name.
+    title.value = '';
+    title.disabled = true;
+    title.placeholder = `${files.length} file đã chọn - tên lấy theo từng tên file`;
+  } else {
+    title.disabled = false;
+    title.placeholder = files.length ? titleFromFilename(files[0].name) : UPLOAD_TITLE_PLACEHOLDER;
+  }
 }
 
-async function uploadDocument() {
-  const fileInput = document.getElementById('uploadFile');
-  const file = fileInput.files[0];
-  if (!file) { toast('Chọn 1 file PDF', true); return; }
-  // Empty title = use the file name (without .pdf).
-  const title = document.getElementById('uploadTitle').value.trim() || titleFromFilename(file.name);
+function showUploadProgress(lines, failed) {
+  const box = document.getElementById('uploadProgress');
+  box.style.display = lines.length || failed.length ? 'block' : 'none';
+  box.innerHTML = lines.map(l => `<div class="muted">${escapeHtml(l)}</div>`).join('') +
+    failed.map(f => `<div style="color:var(--accent)">✗ ${escapeHtml(f.name)}: ${escapeHtml(f.reason)}</div>`).join('');
+}
 
+let uploading = false;
+
+async function uploadOne(file, title) {
   const formData = new FormData();
   formData.append('title', title);
   formData.append('file', file);
-
   let resp;
   try {
     resp = await fetch(SERVER + '/admin/documents/upload', {
@@ -534,20 +547,51 @@ async function uploadDocument() {
       body: formData,
     });
   } catch (e) {
-    toast('Tải lên thất bại: ' + e.message, true);
-    return;
+    return {ok: false, reason: e.message};
   }
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
-    toast('Tải lên thất bại: ' + (body.detail || resp.statusText), true);
-    return;
+    return {ok: false, reason: body.detail || resp.statusText};
   }
-  toast('Đã mã hóa và lưu tài liệu');
-  document.getElementById('uploadTitle').value = '';
-  fileInput.value = '';
-  onUploadFileChosen();
-  await loadDocuments();
-  populateDocSelects();
+  return {ok: true};
+}
+
+// Encrypts the chosen PDFs one after another (one at a time keeps server memory bounded).
+async function uploadDocument() {
+  if (uploading) return;
+  const fileInput = document.getElementById('uploadFile');
+  const files = [...fileInput.files];
+  if (!files.length) { toast('Chọn ít nhất 1 file PDF', true); return; }
+  const typed = document.getElementById('uploadTitle').value.trim();
+  const btn = document.getElementById('uploadBtn');
+
+  uploading = true;
+  btn.disabled = true;
+  const failed = [];
+  let done = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    showUploadProgress([`Đang mã hóa ${i + 1}/${files.length}: ${file.name} ...`], failed);
+    if (!/\.pdf$/i.test(file.name)) { failed.push({name: file.name, reason: 'chỉ nhận file .pdf'}); continue; }
+    if (file.size > 300 * 1024 * 1024) { failed.push({name: file.name, reason: 'file lớn hơn 300MB'}); continue; }
+    // Empty title (or several files) = use the file name without .pdf.
+    const title = (files.length === 1 && typed) || titleFromFilename(file.name);
+    const result = await uploadOne(file, title);
+    if (result.ok) done++; else failed.push({name: file.name, reason: result.reason});
+  }
+  uploading = false;
+  btn.disabled = false;
+
+  showUploadProgress(done ? [`✓ Đã mã hóa và lưu ${done}/${files.length} tài liệu`] : [], failed);
+  if (failed.length) toast(`Thành công ${done}, lỗi ${failed.length}/${files.length} file`, true);
+  else toast(files.length === 1 ? 'Đã mã hóa và lưu tài liệu' : `Đã mã hóa và lưu ${done} tài liệu`);
+  if (done) {
+    document.getElementById('uploadTitle').value = '';
+    fileInput.value = '';
+    onUploadFileChosen();
+    await loadDocuments();
+    populateDocSelects();
+  }
 }
 
 function downloadDocument(docId) {
