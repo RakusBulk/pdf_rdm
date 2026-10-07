@@ -674,6 +674,14 @@ class Viewer(QMainWindow):
             self._handle_offline()
             return
 
+        # A gateway/backend error (e.g. nginx 502/503/504 while the server restarts)
+        # or throttling is not a licensing decision: treat it like "server
+        # unreachable" (bounded grace period) instead of closing the document
+        # with a misleading "revoked or expired" message.
+        if resp.status_code >= 500 or resp.status_code in (408, 429):
+            self._handle_offline()
+            return
+
         # Reachable again -- drop offline tracking and go back to the normal
         # (slower) recheck cadence.
         if self._offline_since is not None:
