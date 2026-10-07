@@ -161,8 +161,8 @@
       <div class="panel">
         <h2>Mã hóa &amp; tải lên tài liệu mới</h2>
         <div class="row">
-          <input id="uploadTitle" type="text" placeholder="Tên tài liệu" style="width:300px">
-          <input id="uploadFile" type="file" accept="application/pdf">
+          <input id="uploadTitle" type="text" placeholder="Tên tài liệu (bỏ trống = lấy theo tên file)" style="width:380px;max-width:100%">
+          <input id="uploadFile" type="file" accept="application/pdf" onchange="onUploadFileChosen()">
           <button class="primary" onclick="uploadDocument()">Mã hóa &amp; tải lên</button>
         </div>
         <p class="muted">File PDF được mã hóa ngay trên server (AES-256-GCM) và lưu lại để tải về
@@ -504,12 +504,23 @@ async function loadDocuments() {
   }
 }
 
+const UPLOAD_TITLE_PLACEHOLDER = 'Tên tài liệu (bỏ trống = lấy theo tên file)';
+
+function titleFromFilename(name) {
+  return (name || '').replace(/\.pdf$/i, '').trim() || 'Tài liệu';
+}
+
+function onUploadFileChosen() {
+  const f = document.getElementById('uploadFile').files[0];
+  document.getElementById('uploadTitle').placeholder = f ? titleFromFilename(f.name) : UPLOAD_TITLE_PLACEHOLDER;
+}
+
 async function uploadDocument() {
-  const title = document.getElementById('uploadTitle').value.trim();
   const fileInput = document.getElementById('uploadFile');
   const file = fileInput.files[0];
-  if (!title) { toast('Nhập tên tài liệu', true); return; }
   if (!file) { toast('Chọn 1 file PDF', true); return; }
+  // Empty title = use the file name (without .pdf).
+  const title = document.getElementById('uploadTitle').value.trim() || titleFromFilename(file.name);
 
   const formData = new FormData();
   formData.append('title', title);
@@ -534,6 +545,7 @@ async function uploadDocument() {
   toast('Đã mã hóa và lưu tài liệu');
   document.getElementById('uploadTitle').value = '';
   fileInput.value = '';
+  onUploadFileChosen();
   await loadDocuments();
   populateDocSelects();
 }

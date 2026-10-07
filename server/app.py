@@ -201,9 +201,11 @@ def register_document(body: RegisterDocument):
 
 
 @app.post("/admin/documents/upload", dependencies=[Depends(require_admin)])
-async def upload_document(title: str = Form(...), file: UploadFile = File(...)):
+async def upload_document(title: str = Form(""), file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Only .pdf files are accepted")
+    # No title given: fall back to the file name without its .pdf extension.
+    title = title.strip() or file.filename.replace("\\", "/").rsplit("/", 1)[-1][:-4].strip() or "Document"
 
     pdf_bytes = await file.read()
     if not pdf_bytes:
