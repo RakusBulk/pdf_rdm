@@ -16,9 +16,14 @@ jobs:
     strategy:
       matrix:
         include:
+          # PyInstaller does not cross-compile, so each Mac CPU needs its own build:
+          # macos-latest is Apple Silicon (arm64); macos-15-intel is the Intel (x86_64) runner.
           - os: macos-latest
             artifact: dist/SecureViewer-macOS.zip
-            name: SecureViewer-macOS
+            name: SecureViewer-macOS-arm64
+          - os: macos-15-intel
+            artifact: dist/SecureViewer-macOS.zip
+            name: SecureViewer-macOS-intel
           - os: windows-latest
             artifact: |
               dist/SecureViewer-Windows.zip
