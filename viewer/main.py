@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import gc
 import json
+import os
 import random
 import sys
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ from urllib.parse import urlparse
 import fitz  # PyMuPDF
 import requests
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QImage, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -48,6 +49,9 @@ from common import crypto  # noqa: E402
 from common.machine_id import get_machine_fingerprint  # noqa: E402
 
 CONFIG_PATH = Path.home() / ".pdf_drm_viewer" / "config.json"
+# Pre-filled in the first-run dialog so users don't have to type it. Override
+# with the PDF_DRM_SERVER_URL environment variable (e.g. for a test server).
+DEFAULT_SERVER_URL = "https://drm.ccie4career.com"
 RECHECK_INTERVAL_MS = 5 * 60 * 1000  # re-validate license with server every 5 min
 OFFLINE_GRACE_MS = 5 * 60 * 1000  # force-close if the server stays unreachable this long
 OFFLINE_RETRY_MS = 30 * 1000  # retry cadence once offline, faster than the normal recheck
@@ -264,7 +268,7 @@ class FirstRunDialog(QDialog):
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #777777;")
 
-        self.server_input = QLineEdit()
+        self.server_input = QLineEdit(os.environ.get("PDF_DRM_SERVER_URL", "").strip() or DEFAULT_SERVER_URL)
         self.server_input.setPlaceholderText("https://your-server.com")
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Jane Doe")
@@ -288,6 +292,8 @@ class FirstRunDialog(QDialog):
         layout.addWidget(subtitle)
         layout.addLayout(form)
         layout.addWidget(buttons)
+        # The server URL is pre-filled, so start on the first thing the user must type.
+        self.username_input.setFocus()
 
     def values(self) -> tuple[str, str, str]:
         return (
@@ -906,8 +912,24 @@ class Viewer(QMainWindow):
         )
 
 
+def app_icon() -> QIcon:
+    """Window/taskbar icon. Works both from source and from the PyInstaller bundle."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    path = base / "viewer" / "assets" / "icon.png"
+    return QIcon(str(path)) if path.exists() else QIcon()
+
+
 def main() -> None:
+    if sys.platform == "win32":
+        # Own taskbar identity so Windows shows our icon instead of grouping under python.exe.
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("com.pdfdrm.secureviewer")
+        except Exception:  # noqa: BLE001 -- cosmetic only
+            pass
     app = QApplication(sys.argv)
+    app.setApplicationName("Secure PDF Viewer")
+    app.setWindowIcon(app_icon())
     # Force a consistent style instead of the native one. On Windows in
     # particular, the native "windowsvista" style pulls in the OS dark-mode
     # palette for any control the stylesheet below doesn't fully repaint

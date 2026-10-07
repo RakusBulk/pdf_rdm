@@ -223,7 +223,9 @@ nếu cần tự build), giải nén, chạy trực tiếp — **không cần c�
 
 Mở app lần đầu, một hộp thoại hiện ra hỏi 3 thông tin:
 
-- **Server URL** — địa chỉ server admin cung cấp.
+- **Server URL** — đã **điền sẵn** `https://drm.ccie4career.com`, thường chỉ cần giữ nguyên.
+  Chỉ sửa khi admin báo địa chỉ khác (hoặc đặt biến môi trường `PDF_DRM_SERVER_URL`
+  trước khi mở app, ví dụ khi thử trên server test).
 - **Your name** — tên hiển thị (admin sẽ thấy tên này khi duyệt yêu cầu và
   trên watermark mỗi trang tài liệu).
 - **Your email** — để admin liên hệ/xác minh.

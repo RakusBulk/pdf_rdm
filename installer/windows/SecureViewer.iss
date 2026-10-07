@@ -36,6 +36,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\..\viewer\assets\icon.ico
 ; PySide6 wheels are 64-bit only, so only offer this installer on 64-bit
 ; Windows. (Use "x64compatible" instead of "x64" if your Inno Setup version
 ; is 6.3+ and prints a deprecation warning for this line.)

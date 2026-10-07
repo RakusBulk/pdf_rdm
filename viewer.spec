@@ -12,7 +12,8 @@ a = Analysis(
     [str(root / "viewer" / "main.py")],
     pathex=[str(root)],
     binaries=[],
-    datas=[],
+    # The window/taskbar icon is loaded at runtime from viewer/assets/icon.png.
+    datas=[(str(root / "viewer" / "assets" / "icon.png"), "viewer/assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -38,6 +39,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # .exe icon (Windows only; on macOS the icon belongs to the .app bundle below).
+    icon=str(root / "viewer" / "assets" / "icon.ico") if sys.platform == "win32" else None,
 )
 
 coll = COLLECT(
@@ -55,7 +58,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="SecureViewer.app",
-        icon=None,
+        icon=str(root / "viewer" / "assets" / "icon.icns"),
         bundle_identifier="com.pdfdrm.secureviewer",
         info_plist={
             "NSHighResolutionCapable": "True",
