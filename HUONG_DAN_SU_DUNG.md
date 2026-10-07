@@ -287,16 +287,20 @@ nhận diện được người và thời điểm.
 
 ### 3.5 Khi tài liệu tự đóng
 
-App tự kiểm tra lại với server mỗi 5 phút; nếu quyền bị admin thu hồi hoặc
-hết hạn, tài liệu đang mở **tự đóng ngay** kèm thông báo lý do.
+Viewer **hỏi server mỗi 5 giây** xem tài liệu đang mở còn được phép không
+(kiểm tra nhẹ, chạy nền, không làm đơ giao diện, không ghi Access log khi thành
+công). Cần mạng liên tục để đọc tài liệu.
 
-Nếu server không kết nối được (mất mạng): app cảnh báo "Offline" ngay lần
-đầu, sau đó **tự kiểm tra lại mỗi 30 giây** (nhanh hơn nhịp bình thường) để
-sớm phát hiện khi có mạng trở lại. Nếu sau **5 phút vẫn không kết nối
-được**, tài liệu **tự đóng thật sự** kèm thông báo rõ lý do — không còn
-tình trạng cảnh báo suông rồi vẫn mở mãi như trước. Nếu mạng phục hồi
-trong lúc đó, app tự quay lại nhịp kiểm tra bình thường, không cần mở lại
-tài liệu.
+| Tình huống | Viewer làm gì |
+|---|---|
+| Admin thu hồi license | Đóng tài liệu ở lần kiểm tra kế tiếp (tối đa ~5 giây). |
+| License hết hạn | Đóng ngay khi tới hạn, kể cả đang mất mạng. Hạn tính theo **giờ của server**, nên chỉnh đồng hồ máy không kéo dài được. |
+| **Mất kết nối tới server** | **Ẩn ngay nội dung** (và panel mục lục), hiện thông báo "Connection to the license server lost". Nếu **15 giây** vẫn chưa nối lại được thì **đóng tài liệu** và giải phóng nội dung đã giải mã. Trong lúc mất kết nối, không mở được file nào ("Open..." bị từ chối). |
+| Có mạng lại trong 15 giây | Tự hiện lại đúng trang đang đọc, không cần mở lại. |
+| Server lỗi tạm (502/503/504, trang đăng nhập Wi-Fi...) | Coi như mất kết nối, không coi là bị thu hồi. |
+
+Tính từ lúc đứt mạng, nội dung bị ẩn sau tối đa ~5-9 giây và tài liệu đóng sau
+tối đa ~25 giây. Viewer chỉ đóng **tài liệu**, cửa sổ ứng dụng vẫn mở.
 
 ### 3.6 Bắt buộc kết nối mã hóa (HTTPS)
 
@@ -341,7 +345,7 @@ quyền admin trên máy của chính họ. Hệ thống này **không** ngăn �
   vết*, không *ngăn chặn*).
 - Máy in ảo hoặc công cụ chụp toàn màn hình ở cấp hệ điều hành.
 - Người dùng có quyền admin dùng debugger dump bộ nhớ lúc app đang chạy.
-- Sửa đồng hồ hệ thống giữa 2 lần server tự kiểm tra lại (mặc định 5 phút).
+- (Đã giảm thiểu) Sửa đồng hồ hệ thống: hạn license tính theo giờ server và viewer kiểm tra server mỗi 5 giây.
 - Reverse-engineer bản build viewer (chạy trên máy người dùng nên luôn có
   thể bị phân tích).
 

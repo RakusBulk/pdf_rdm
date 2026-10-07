@@ -301,18 +301,21 @@ identifiable.
 
 ### 3.5 When a document auto-closes
 
-The app re-checks with the server every 5 minutes; if access has been
-revoked or has expired, the open document **closes immediately** with a
-message explaining why.
+The viewer **asks the server every 5 seconds** whether the open document is
+still allowed (a light background check: it never freezes the UI and writes
+nothing to the access log on success). A live connection is required to read.
 
-If the server can't be reached (network down): the app shows an "Offline"
-warning right away, then **retries every 30 seconds** (faster than the
-normal cadence) to quickly detect when the connection comes back. If it's
-still unreachable after **5 minutes**, the document **actually closes** with
-a clear explanation — no more silent warnings while the document stays open
-indefinitely, as before. If the connection recovers in the meantime, the
-app goes back to its normal check cadence without needing to reopen the
-document.
+| Situation | What the viewer does |
+|---|---|
+| Admin revokes the license | Closes the document at the next check (within ~5 seconds). |
+| License expires | Closes right at the expiry time, even while offline. Expiry uses the **server's clock**, so changing the PC clock does not extend it. |
+| **Connection to the server lost** | **Hides the content immediately** (and the bookmarks panel) and shows "Connection to the license server lost". If it is not back within **15 seconds** the document is **closed** and the decrypted content released. While disconnected nothing can be opened ("Open..." is refused). |
+| Connection back within 15 seconds | The page you were reading reappears; no need to reopen. |
+| Temporary server error (502/503/504, Wi-Fi login page...) | Treated like a lost connection, not as a revoked license. |
+
+From the moment the network drops, the content is hidden within ~5-9 seconds and
+the document closes within ~25 seconds at most. Only the **document** closes;
+the application window stays open.
 
 ### 3.6 Mandatory encrypted connection (HTTPS)
 
@@ -359,8 +362,8 @@ admin rights on their own machine. This system **cannot** prevent:
 - Virtual printers or OS-level full-screen capture tools.
 - A user with admin rights dumping the app's memory with a debugger while
   it's running.
-- Changing the system clock between two server re-checks (5 minutes by
-  default).
+- (Mitigated) Changing the system clock: license expiry uses the server's clock,
+  and the viewer checks the server every 5 seconds.
 - Reverse-engineering the viewer build (it runs on the user's machine, so
   it can always be analyzed).
 

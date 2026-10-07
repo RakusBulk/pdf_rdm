@@ -284,9 +284,9 @@ Print/Save trong app), nhưng **không** ngăn được:
   điều hành, hoặc công cụ chụp màn hình toàn màn hình.
 - **Người dùng có quyền admin dùng debugger để dump vùng nhớ** chứa PDF đã
   giải mã trong lúc ứng dụng đang chạy.
-- **Sửa đồng hồ hệ thống** giữa hai lần server re-check (mặc định 5 phút) —
-  vô hiệu hóa bằng cách rút ngắn chu kỳ re-check, nhưng đánh đổi là cần mạng
-  liên tục.
+- **Chặn mạng/giả server**: viewer kiểm tra server mỗi 5 giây, ẩn nội dung ngay khi
+  mất kết nối và đóng sau 15 giây; hạn license tính theo giờ server nên chỉnh
+  đồng hồ máy không kéo dài được. Đánh đổi là cần mạng liên tục để đọc tài liệu.
 - **Reverse-engineer trình xem** để tự thêm chức năng export — vì trình xem
   chạy trên máy người dùng, mã nguồn/binary của nó luôn có thể bị phân tích.
   Đóng gói bằng PyInstaller + obfuscation chỉ làm chậm việc này, không chặn

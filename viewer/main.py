@@ -14,13 +14,15 @@ import json
 import os
 import random
 import sys
-from datetime import datetime, timezone
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 import fitz  # PyMuPDF
 import requests
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QIcon, QImage, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -52,9 +54,9 @@ CONFIG_PATH = Path.home() / ".pdf_drm_viewer" / "config.json"
 # Pre-filled in the first-run dialog so users don't have to type it. Override
 # with the PDF_DRM_SERVER_URL environment variable (e.g. for a test server).
 DEFAULT_SERVER_URL = "https://drm.ccie4career.com"
-RECHECK_INTERVAL_MS = 5 * 60 * 1000  # re-validate license with server every 5 min
-OFFLINE_GRACE_MS = 5 * 60 * 1000  # force-close if the server stays unreachable this long
-OFFLINE_RETRY_MS = 30 * 1000  # retry cadence once offline, faster than the normal recheck
+HEARTBEAT_INTERVAL_MS = 5 * 1000  # ask the server whether this document is still allowed
+OFFLINE_GRACE_MS = 15 * 1000  # no successful answer for this long -> close the document
+REQUEST_TIMEOUT_S = 4  # network timeout of one heartbeat (it runs off the UI thread)
 WATERMARK_TICK_MS = 1600  # how often the watermark jumps to a new position
 WATERMARK_POSITIONS = [(0.2, 0.3), (0.5, 0.75)]  # fractional (x, y) -> 2 marks, spread diagonally
 DPI = 150
@@ -337,6 +339,9 @@ class LicenseDenied(Exception):
 
 
 class Viewer(QMainWindow):
+    # Emitted from the heartbeat worker thread; delivered on the UI thread.
+    heartbeat_result = Signal(object)
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Secure PDF Viewer")
@@ -350,7 +355,10 @@ class Viewer(QMainWindow):
         self.fingerprint = get_machine_fingerprint()
         self.watermark_label = self.fingerprint[:12]
         self._raw_pixmap: QPixmap | None = None
-        self._offline_since: datetime | None = None
+        self._offline_since: float | None = None  # time.monotonic() of the first missed heartbeat
+        self._hb_inflight = False
+        self._clock_offset = timedelta(0)  # server clock minus local clock, from the last response
+        self._toc_was_visible = True
         self._search_matches: list[tuple[int, fitz.Rect]] = []
         self._search_index = -1
         self._last_search_query = ""
@@ -379,7 +387,8 @@ class Viewer(QMainWindow):
 
         self.recheck_timer = QTimer(self)
         self.recheck_timer.timeout.connect(self._revalidate_license)
-        self.recheck_timer.start(RECHECK_INTERVAL_MS)
+        self.recheck_timer.start(HEARTBEAT_INTERVAL_MS)
+        self.heartbeat_result.connect(self._on_heartbeat_result)
 
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self._update_status)
@@ -548,6 +557,9 @@ class Viewer(QMainWindow):
     # ---------- file open / license flow ----------
 
     def open_file(self) -> None:
+        if self._offline_since is not None:
+            QMessageBox.warning(self, "Offline", "Cannot open anything while the connection to the license server is lost.")
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Open encrypted PDF", "", "Encrypted PDF (*.cpdf)")
         if not path:
             return
@@ -615,7 +627,7 @@ class Viewer(QMainWindow):
         self.page_index = 0
         self._clear_search()
         self._offline_since = None
-        self.recheck_timer.setInterval(RECHECK_INTERVAL_MS)
+        self._update_clock_offset(data.get("server_time"))
 
         # Best-effort: drop our reference to the plaintext bytes; PyMuPDF has
         # already copied what it needs into its own internal buffer.
@@ -661,72 +673,117 @@ class Viewer(QMainWindow):
         self.page_index = max(0, min(len(self.doc) - 1, page - 1))
         self._render_page()
 
-    def _revalidate_license(self) -> None:
-        if not self.doc_id:
+    def _now(self) -> datetime:
+        """Current time on the server's clock (local clock + last measured offset),
+        so changing the PC's clock does not extend a license."""
+        return datetime.now(timezone.utc) + self._clock_offset
+
+    def _update_clock_offset(self, server_time: str | None) -> None:
+        if not server_time:
             return
         try:
+            self._clock_offset = parse_iso(server_time) - datetime.now(timezone.utc)
+        except ValueError:
+            pass
+
+    def _revalidate_license(self) -> None:
+        """Timer slot: start one background check. Never blocks the UI thread."""
+        if not self.doc_id or self._hb_inflight:
+            return
+        self._hb_inflight = True
+        threading.Thread(
+            target=self._heartbeat_worker,
+            args=(self.doc_id, self.server_url, self.fingerprint),
+            daemon=True,
+        ).start()
+
+    def _heartbeat_worker(self, doc_id: str, server_url: str, fingerprint: str) -> None:
+        result = {"doc_id": doc_id, "kind": "unreachable", "data": None}
+        try:
             resp = requests.post(
-                f"{self.server_url.rstrip('/')}/license/request",
-                json={"doc_id": self.doc_id, "machine_fingerprint": self.fingerprint},
-                timeout=15,
+                f"{server_url.rstrip('/')}/license/heartbeat",
+                json={"doc_id": doc_id, "machine_fingerprint": fingerprint},
+                timeout=REQUEST_TIMEOUT_S,
             )
-        except requests.RequestException:
+            if resp.status_code == 200:
+                data = resp.json()
+                # Anything that is not our server's answer (captive portal, proxy page)
+                # counts as unreachable, never as "still licensed".
+                if isinstance(data, dict) and data.get("status") == "ok":
+                    result.update(kind="ok", data=data)
+            elif resp.status_code >= 500 or resp.status_code in (408, 429):
+                pass  # gateway/backend trouble is not a licensing decision: same as unreachable
+            else:
+                result["kind"] = "denied"  # 403/404: revoked, expired or no longer licensed
+        except (requests.RequestException, ValueError):
+            pass
+        self.heartbeat_result.emit(result)
+
+    def _on_heartbeat_result(self, result: dict) -> None:
+        self._hb_inflight = False
+        if not self.doc_id or result["doc_id"] != self.doc_id:
+            return  # the document was closed/replaced while the check was in flight
+        if result["kind"] == "unreachable":
             self._handle_offline()
             return
-
-        # A gateway/backend error (e.g. nginx 502/503/504 while the server restarts)
-        # or throttling is not a licensing decision: treat it like "server
-        # unreachable" (bounded grace period) instead of closing the document
-        # with a misleading "revoked or expired" message.
-        if resp.status_code >= 500 or resp.status_code in (408, 429):
-            self._handle_offline()
-            return
-
-        # Reachable again -- drop offline tracking and go back to the normal
-        # (slower) recheck cadence.
-        if self._offline_since is not None:
-            self._offline_since = None
-            self.recheck_timer.setInterval(RECHECK_INTERVAL_MS)
-
-        if resp.status_code != 200:
+        if result["kind"] == "denied":
             self._close_document("Your license for this document is no longer valid "
-                                  "(revoked or expired). The document has been closed.")
+                                 "(revoked or expired). The document has been closed.")
+            return
+        data = result["data"]
+        self._update_clock_offset(data.get("server_time"))
+        try:
+            self.expires_at = parse_iso(data["expires_at"])
+        except (KeyError, ValueError):
+            pass
+        if self._offline_since is not None:  # connection is back within the grace period
+            self._offline_since = None
+            self._restore_after_offline()
 
     def _handle_offline(self) -> None:
-        # A single unreachable check used to just warn and keep the document
-        # open indefinitely -- an attacker (or just a flaky network) could
-        # disconnect and the periodic re-check would never actually enforce
-        # anything. Now: the first failure starts a bounded grace period and
-        # switches to faster retries; if the server is still unreachable
-        # once that grace period elapses, the document force-closes.
-        now = datetime.now(timezone.utc)
+        # The moment the server stops answering, the document is hidden (nothing
+        # may stay readable without a live license check). If the connection is
+        # not back within OFFLINE_GRACE_MS the document is closed and its
+        # decrypted content released. time.monotonic() so that changing the
+        # PC's clock cannot stretch the grace period.
+        now = time.monotonic()
         if self._offline_since is None:
             self._offline_since = now
-            self.recheck_timer.setInterval(OFFLINE_RETRY_MS)
-            QMessageBox.warning(
-                self, "Offline",
-                "Could not reach the license server to re-validate this document.\n\n"
-                f"The document will close automatically in {OFFLINE_GRACE_MS // 60000} "
-                "minutes if the connection isn't restored.",
-            )
+            self._hide_for_offline()
             return
-        elapsed_ms = (now - self._offline_since).total_seconds() * 1000
-        if elapsed_ms >= OFFLINE_GRACE_MS:
+        if (now - self._offline_since) * 1000 >= OFFLINE_GRACE_MS:
             self._close_document(
-                "Could not reach the license server to re-validate this document "
-                f"for over {OFFLINE_GRACE_MS // 60000} minutes. The document has been "
-                "closed for your security."
+                "The connection to the license server was lost for over "
+                f"{OFFLINE_GRACE_MS // 1000} seconds. The document has been closed for your security."
             )
 
+    def _hide_for_offline(self) -> None:
+        self._toc_was_visible = self.toc_dock.isVisible()
+        self.toc_dock.hide()
+        self.label.clear()
+        self.label.setText(
+            "Connection to the license server lost.\n\n"
+            f"The document is hidden and will close in {OFFLINE_GRACE_MS // 1000} seconds "
+            "unless the connection is restored."
+        )
+        self.statusBar().showMessage("OFFLINE - reconnecting...")
+
+    def _restore_after_offline(self) -> None:
+        self.toc_dock.setVisible(self._toc_was_visible)
+        self.label.setText("")
+        self._render_page()
+
     def _close_document(self, message: str) -> None:
+        if self._offline_since is not None:
+            self.toc_dock.setVisible(self._toc_was_visible)
         self.doc = None
         self.doc_id = None
         self._raw_pixmap = None
         self._offline_since = None
-        self.recheck_timer.setInterval(RECHECK_INTERVAL_MS)
         self._search_matches = []
         self._search_index = -1
         self._last_search_query = ""
+        self.label.clear()
         self.label.setText("")
         self.toc_tree.clear()
         self.setWindowTitle("Secure PDF Viewer")
@@ -736,7 +793,7 @@ class Viewer(QMainWindow):
     # ---------- rendering ----------
 
     def _render_page(self) -> None:
-        if not self.doc:
+        if not self.doc or self._offline_since is not None:
             return
         # Render at DPI * screen device-pixel-ratio so the page is sharp on
         # HiDPI/Retina displays -- without this, a 150-DPI bitmap gets
@@ -761,7 +818,7 @@ class Viewer(QMainWindow):
         # avoids them, and the moving text draws the eye if someone is
         # filming/photographing the screen. Two marks (WATERMARK_POSITIONS),
         # spread diagonally and jittered, rather than a dense tile.
-        if not self._raw_pixmap:
+        if not self._raw_pixmap or self._offline_since is not None:
             return
         dpr = self.devicePixelRatioF() or 1.0
         result = QPixmap(self._raw_pixmap)
@@ -906,9 +963,12 @@ class Viewer(QMainWindow):
         if not self.doc or not self.expires_at:
             self.statusBar().showMessage("No document open")
             return
-        remaining = self.expires_at - datetime.now(timezone.utc)
-        if remaining.total_seconds() <= 0:
+        remaining = self.expires_at - self._now()
+        if remaining.total_seconds() <= 0:  # enforced locally too, so it also applies while offline
             self._close_document("Your license for this document has expired.")
+            return
+        if self._offline_since is not None:
+            self.statusBar().showMessage("OFFLINE - reconnecting...")
             return
         days = remaining.days
         hours = remaining.seconds // 3600

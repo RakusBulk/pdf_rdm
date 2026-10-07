@@ -747,7 +747,38 @@ def request_license(body: LicenseRequest):
             "title": doc["title"],
             "expires_at": lic["expires_at"],
             "watermark_label": lic["label"] or body.machine_fingerprint[:12],
+            "server_time": now_utc().isoformat(),
         }
+
+
+@app.post("/license/heartbeat")
+def license_heartbeat(body: LicenseRequest):
+    """Cheap validity check for a document the viewer already has open.
+
+    Viewers call this every few seconds, so unlike /license/request it never
+    returns the key and does not write the access log on success (that would
+    flood the log and the DB). Denials are logged, once: the viewer closes the
+    document on the first denial. `server_time` lets the viewer enforce expiry
+    against the server's clock instead of the (changeable) local one.
+    """
+    with get_conn() as conn:
+        lic = conn.execute(
+            """SELECT l.expires_at, l.revoked FROM licenses l
+               JOIN documents d ON d.doc_id = l.doc_id
+               WHERE l.doc_id = ? AND l.machine_fingerprint = ?""",
+            (body.doc_id, body.machine_fingerprint),
+        ).fetchone()
+        if not lic:
+            known = conn.execute("SELECT 1 FROM documents WHERE doc_id = ?", (body.doc_id,)).fetchone()
+            _log(conn, body, "no_license" if known else "unknown_doc")
+            raise HTTPException(status_code=403 if known else 404, detail="Not licensed for this document")
+        if lic["revoked"]:
+            _log(conn, body, "revoked")
+            raise HTTPException(status_code=403, detail="License revoked")
+        if parse_iso(lic["expires_at"]) <= now_utc():
+            _log(conn, body, "expired")
+            raise HTTPException(status_code=403, detail="License expired")
+        return {"status": "ok", "expires_at": lic["expires_at"], "server_time": now_utc().isoformat()}
 
 
 def _log(conn, body: LicenseRequest, result: str) -> None:
@@ -755,3 +786,7 @@ def _log(conn, body: LicenseRequest, result: str) -> None:
         "INSERT INTO access_log (doc_id, machine_fingerprint, result) VALUES (?, ?, ?)",
         (body.doc_id, body.machine_fingerprint, result),
     )
+    # Commit now: denials are logged right before raising HTTPException, and
+    # get_conn() only commits when the block exits normally -- without this the
+    # denied attempts were rolled back and never reached the access log.
+    conn.commit()
